@@ -2,26 +2,55 @@
     "scopeName": "source.tom",
     "patterns": [
         {
-            "comment": "1. Strings completas (l'Texto')",
-            "match": "l'[^']*'",
-            "name": "string.quoted.single.tom"
+            "comment": "1. Strings literais (l'Texto')",
+            "match": "(l')([^']*)(')",
+            "captures": {
+                "1": {
+                    "name": "keyword.operator.tom"
+                },
+                "2": {
+                    "name": "string.quoted.single.tom"
+                },
+                "3": {
+                    "name": "keyword.operator.tom"
+                }
+            }
         },
         {
-            "comment": "2. Hexadecimais",
-            "match": "(@|0x)[0-9A-Fa-f]+",
-            "name": "constant.numeric.hex.tom"
-        },
-        {
-            "comment": "3. Comandos no início",
-            "match": "^(Somar|Subtr|Multi|Divid|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefZn|DefKernel|FimDef|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuRec|SEProv|SEImpr)",
+            "comment": "2. Comandos (Somar, GpuDisp...) - SEM \\b no final para aceitar colado",
+            "match": "\\b(Somar|Subtr|Multi|Divid|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefZn|DefKernel|FimDef|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuRec|SEProv|SEImpr)",
             "name": "keyword.control.tom"
         },
         {
-            "comment": "4. Padrão COMPLETO: separador + número (x1000, y500, z20)",
-            "match": "([xyz])(\\d+)",
+            "comment": "3. Tipo + Bits (Fl64, In32). Ambos como Storage/Type (Azul/Ciano)",
+            "match": "(In|Fl|Sd|Ud)(32|64|128)",
             "captures": {
                 "1": {
-                    "name": "punctuation.separator.tom"
+                    "name": "storage.type.tom"
+                },
+                "2": {
+                    "name": "storage.type.tom"
+                }
+            }
+        },
+        {
+            "comment": "4. Hexadecimais (0xFF...)",
+            "match": "(@|0x)([0-9A-Fa-f]+)",
+            "captures": {
+                "1": {
+                    "name": "keyword.operator.tom"
+                },
+                "2": {
+                    "name": "constant.numeric.hex.tom"
+                }
+            }
+        },
+        {
+            "comment": "5. Variável + Número (x1000). Garante separação de cores.",
+            "match": "([xyz])([0-9]+)",
+            "captures": {
+                "1": {
+                    "name": "variable.parameter.tom"
                 },
                 "2": {
                     "name": "constant.numeric.tom"
@@ -29,31 +58,14 @@
             }
         },
         {
-            "comment": "5. Padrão COMPLETO: tipo + número (Fl64, In32, Sd128)",
-            "match": "\\b(In|Fl|Sd|Ud)(32|64|128)",
-            "captures": {
-                "1": {
-                    "name": "storage.type.tom"
-                },
-                "2": {
-                    "name": "storage.type.tom"
-                }
-            }
+            "comment": "6. Variáveis soltas (x, y) que sobraram no meio.",
+            "match": "[xyz]",
+            "name": "variable.parameter.tom"
         },
         {
-            "comment": "6. Separadores sozinhos (x, y, z quando NÃO seguidos de dígito)",
-            "match": "[xyz](?!\\d)",
-            "name": "punctuation.separator.tom"
-        },
-        {
-            "comment": "7. Outros tipos",
+            "comment": "7. Tipos Especiais (Vec4, Heap, etc)",
             "match": "\\b(Vec4|Vec8|Esc|Hp|Stk|Zn|FB64C|FB64U|FB64|I8|UT)\\b",
             "name": "storage.type.tom"
-        },
-        {
-            "comment": "8. Variáveis",
-            "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
-            "name": "variable.parameter.tom"
         }
     ]
 }
