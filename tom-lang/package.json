@@ -1,12 +1,13 @@
 {
     "name": "tom-lang",
     "displayName": "Linguagem Tom",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "engines": {
         "vscode": "^1.70.0"
     },
     "categories": [
-        "Programming Languages"
+        "Programming Languages",
+        "Snippets"
     ],
     "contributes": {
         "languages": [
@@ -27,6 +28,12 @@
                 "language": "tom",
                 "scopeName": "source.tom",
                 "path": "./syntaxes/tom.tmGrammar.json"
+            }
+        ],
+        "snippets": [
+            {
+                "language": "tom",
+                "path": "./snippets.json"
             }
         ]
     }

@@ -1,0 +1,44 @@
+{
+    "Soma Inteiro": {
+        "prefix": "SomarIn",
+        "body": [
+            "SomarxyIn${1|Sd,Ud|}${2|32,64|}x${3:Val1}y${4:Val2}"
+        ],
+        "description": "Soma de inteiros com opções de sinal e bits."
+    },
+    "Soma Float": {
+        "prefix": "SomarFl",
+        "body": [
+            "SomarxyFl${1|32,64|}x${2:Val1}y${3:Val2}"
+        ],
+        "description": "Soma de ponto flutuante."
+    },
+    "Alocacao Heap": {
+        "prefix": "Aloc",
+        "body": [
+            "AlocHp${1|In,Fl|}${2|Sd,Ud|}${3|32,64|}x${4:ptrNome}y${5:ValorInicial}"
+        ],
+        "description": "Aloca memória na Heap."
+    },
+    "Definir Zona": {
+        "prefix": "ZonaDef",
+        "body": [
+            "ZonaDefx${1:NomeArena}y${2:4096}"
+        ],
+        "description": "Define uma nova zona de memória."
+    },
+    "GPU Dispatch": {
+        "prefix": "GpuDisp",
+        "body": [
+            "GpuDispx${1:NomeKernel}x${2:1000}y${3:1}z${4:1}"
+        ],
+        "description": "Executa um Kernel na GPU."
+    },
+    "String Stack Safe": {
+        "prefix": "StrSafe",
+        "body": [
+            "DefStkFB64Cx${1:strNome}yl'${2:Texto}'"
+        ],
+        "description": "Define string segura na stack (Fixed Buffer)."
+    }
+}

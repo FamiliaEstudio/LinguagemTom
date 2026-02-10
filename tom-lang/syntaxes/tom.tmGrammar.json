@@ -2,29 +2,39 @@
     "scopeName": "source.tom",
     "patterns": [
         {
-            "comment": "Comandos Principais (Azul)",
-            "match": "\\b(Somar|Divid|ZonaDef|ZonaMatar|GpuDisp|GpuRec)\\b",
+            "comment": "CMD: Comandos Fixos (Palavras-chave)",
+            "match": "\\b(Somar|Subtr|Multi|Divid|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefZn|DefKernel|FimDef|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuRec|SEProv|SEImpr)\\b",
             "name": "keyword.control.tom"
         },
         {
-            "comment": "Tipos e Modos (Roxo)",
-            "match": "(Vec4|In|Sd|Ud|Fl|32|64|FB64C|FB64|UT|I8)",
+            "comment": "OPC: Opções Selecionáveis (Tipos, Modos, Tamanhos)",
+            "match": "\\b(In|Fl|Sd|Ud|32|64|128|Vec4|Vec8|Esc|Hp|Stk|Zn|FB64C|FB64U|FB64|I8|UT)\\b",
             "name": "storage.type.tom"
         },
         {
-            "comment": "Separadores (Cinza)",
-            "match": "(?<=.)(x|y|z|l)(?=.)",
-            "name": "comment.block.tom"
+            "comment": "INP: Strings (Iniciadas por l')",
+            "match": "l'[^']*'",
+            "name": "string.quoted.single.tom"
         },
         {
-            "comment": "Números (Verde)",
+            "comment": "INP: Números Hexadecimais (Ponteiros/Endereços)",
+            "match": "\\b0x[0-9A-Fa-f]+\\b|@[0-9A-Fa-fXx]+",
+            "name": "constant.numeric.hex.tom"
+        },
+        {
+            "comment": "INP: Números Decimais",
             "match": "\\b\\d+\\b",
             "name": "constant.numeric.tom"
         },
         {
-            "comment": "Referências/Inputs (Laranja)",
-            "match": "(?<=x|y|z)[A-Z][a-zA-Z0-9_]+",
+            "comment": "INP: Variáveis (Inputs do usuário após separadores)",
+            "match": "(?<=x|y|z|@)[a-zA-Z][a-zA-Z0-9_]*",
             "name": "variable.parameter.tom"
+        },
+        {
+            "comment": "Separadores (x, y, z, l)",
+            "match": "(?<=.)(x|y|z|l)(?=.)",
+            "name": "punctuation.separator.tom"
         }
     ]
 }
