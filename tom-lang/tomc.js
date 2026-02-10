@@ -26,6 +26,10 @@ const budgetState = {
   frameTargetFps: null,
   systems: [],
   priorities: [],
+  systemMap: new Map(),
+  staticCostBySystem: new Map(),
+  staticWarnings: [],
+  runtimeInstrumentation: false,
 };
 const gpuState = {
   buffers: new Map(),
@@ -41,6 +45,22 @@ const controlState = {
   nextLabelId: 0,
   currentBlock: 'entry',
   blockTerminated: false,
+};
+
+const TOMC_TOMCYCLES_PER_MS = 1000;
+budgetState.runtimeInstrumentation = lines.some((line) => /^DefBudgetFramexyTargetFPSy(\d+)$/.test(line));
+
+const OP_COSTS = {
+  Somar: 1,
+  Subtr: 1,
+  Multi: 3,
+  Divid: 60,
+  SomarVec4: 6,
+  SubtrVec4: 6,
+  MultiVec4: 10,
+  DividVec4: 120,
+  GpuEnv: 400,
+  GpuRec: 400,
 };
 
 function nextReg() {
@@ -147,6 +167,54 @@ function parseNumber(value, llvmType, isFloat) {
 }
 
 
+
+function parseTomPerfStressRegister(text) {
+  const trimmed = text.trim();
+  if (trimmed === '@TomPerf_StressLevel') {
+    return '@TomPerf_StressLevel';
+  }
+  return null;
+}
+
+function costToTomCycles(maxMs) {
+  return Math.round(maxMs * TOMC_TOMCYCLES_PER_MS);
+}
+
+function trackSystemCost(cost) {
+  const activeScope = controlState.scopeStack[controlState.scopeStack.length - 1];
+  if (!activeScope) return;
+
+  const system = budgetState.systemMap.get(activeScope.scopeName);
+  if (!system) return;
+
+  const current = budgetState.staticCostBySystem.get(system.name) || 0;
+  budgetState.staticCostBySystem.set(system.name, current + cost);
+}
+
+function emitRuntimeBudgetPrelude() {
+  if (!budgetState.runtimeInstrumentation) return;
+  emitInstruction('%tom_budget_cycle_start = call i64 @llvm.readcyclecounter()');
+}
+
+function emitRuntimeBudgetEpilogue() {
+  if (!budgetState.runtimeInstrumentation) return;
+  emitInstruction('%tom_budget_cycle_end = call i64 @llvm.readcyclecounter()');
+  emitInstruction('%tom_budget_cycle_elapsed = sub i64 %tom_budget_cycle_end, %tom_budget_cycle_start');
+  emitInstruction('call void @TomBudgetManager_Report(i8* null, i64 %tom_budget_cycle_elapsed)');
+}
+
+function emitStaticBudgetWarnings() {
+  for (const system of budgetState.systems) {
+    const maxTomCycles = costToTomCycles(system.maxMs);
+    const estimated = budgetState.staticCostBySystem.get(system.name) || 0;
+    if (estimated > maxTomCycles) {
+      budgetState.staticWarnings.push(
+        `Atenção: O bloco '${system.name}' tem custo teórico de ${estimated} TomCycles, acima do limite de ${maxTomCycles} TomCycles (~${system.maxMs} ms).`,
+      );
+    }
+  }
+}
+
 function emitBudgetDirective(line) {
   const frame = line.match(/^DefBudgetFramexyTargetFPSy(\d+)$/);
   if (frame) {
@@ -157,6 +225,7 @@ function emitBudgetDirective(line) {
     }
 
     budgetState.frameTargetFps = fps;
+    budgetState.runtimeInstrumentation = true;
     emitInstruction(`; TOM_BUDGET_FRAME target_fps=${fps}`);
     return true;
   }
@@ -170,7 +239,14 @@ function emitBudgetDirective(line) {
       return true;
     }
 
-    budgetState.systems.push({ name, maxMs });
+    if (budgetState.systemMap.has(name)) {
+      createError(`DefBudgetSistema duplicado para '${name}'.`);
+      return true;
+    }
+
+    const systemData = { name, maxMs };
+    budgetState.systems.push(systemData);
+    budgetState.systemMap.set(name, systemData);
     emitInstruction(`; TOM_BUDGET_SYSTEM name=${name} max_ms=${maxMs}`);
     return true;
   }
@@ -218,6 +294,7 @@ function emitNumericOperation(line) {
     };
 
     emitInstruction(`${reg} = ${opMap[op]} ${llvmType} ${x}, ${y}`);
+    trackSystemCost(OP_COSTS[op] || 1);
     lastNumericValue = { reg, llvmType };
     return true;
   }
@@ -243,6 +320,7 @@ function emitNumericOperation(line) {
     };
 
     emitInstruction(`${reg} = ${opMap[op]} ${llvmType} ${x}, ${y}`);
+    trackSystemCost(OP_COSTS[op] || 1);
     lastNumericValue = { reg, llvmType };
     return true;
   }
@@ -288,6 +366,7 @@ function emitVectorOperation(line) {
   };
 
   emitInstruction(`${reg} = ${opMap[op]} ${llvmVecType} <${lhs.map((n) => `${llvmElemType} ${n}`).join(', ')}>, <${rhs.map((n) => `${llvmElemType} ${n}`).join(', ')}>`);
+  trackSystemCost(OP_COSTS[`${op}Vec4`] || 6);
   return true;
 }
 
@@ -296,14 +375,21 @@ function emitControlFlow(line) {
   if (scopeStart) {
     const [, scopeName] = scopeStart;
     const safe = sanitizeLabel(scopeName);
+    const scopeSystem = budgetState.systemMap.get(scopeName) || null;
     const scope = {
       scopeName,
+      system: scopeSystem,
       startLabel: nextLabel(`escopo_${safe}_ini`),
       endLabel: nextLabel(`escopo_${safe}_fim`),
+      enterCycleReg: scopeSystem ? nextReg() : null,
     };
 
     terminateCurrentBlock(`br label %${scope.startLabel}`);
     emitLabel(scope.startLabel);
+    if (scope.system) {
+      emitInstruction(`${scope.enterCycleReg} = call i64 @llvm.readcyclecounter()`);
+      emitInstruction(`; TOM_BUDGET_SCOPE_BEGIN name=${scope.system.name}`);
+    }
     controlState.scopeStack.push(scope);
     return true;
   }
@@ -319,10 +405,20 @@ function emitControlFlow(line) {
 
     terminateCurrentBlock(`br label %${currentScope.endLabel}`);
     emitLabel(currentScope.endLabel);
+    if (currentScope.system) {
+      const endCycleReg = nextReg();
+      const elapsedCycleReg = nextReg();
+      emitInstruction(`${endCycleReg} = call i64 @llvm.readcyclecounter()`);
+      emitInstruction(`${elapsedCycleReg} = sub i64 ${endCycleReg}, ${currentScope.enterCycleReg}`);
+      const sysInfo = createGlobalString(currentScope.system.name, 'budget_name');
+      const sysPtr = pointerToGlobal(sysInfo);
+      emitInstruction(`call void @TomBudgetManager_Report(i8* ${sysPtr}, i64 ${elapsedCycleReg})`);
+      emitInstruction(`; TOM_BUDGET_SCOPE_END name=${currentScope.system.name}`);
+    }
     return true;
   }
 
-  const greater = line.match(/^SeMaiorxyIn(Sd|Ud)(32|64)x(-?\d+)y(-?\d+)$/);
+  const greater = line.match(/^SeMaiorxyIn(Sd|Ud)(32|64)x([^y]+)y([^y]+)$/);
   if (greater) {
     const [, sign, bits, leftRaw, rightRaw] = greater;
     const activeScope = controlState.scopeStack[controlState.scopeStack.length - 1];
@@ -332,8 +428,8 @@ function emitControlFlow(line) {
     }
 
     const llvmType = bits === '32' ? 'i32' : 'i64';
-    const left = parseNumber(leftRaw, llvmType, false);
-    const right = parseNumber(rightRaw, llvmType, false);
+    const left = parseNumber(leftRaw, llvmType, false) ?? parseTomPerfStressRegister(leftRaw);
+    const right = parseNumber(rightRaw, llvmType, false) ?? parseTomPerfStressRegister(rightRaw);
     if (left === null || right === null) {
       createError(`Comparação inválida para ${llvmType}: ${line}`);
       return true;
@@ -509,6 +605,7 @@ function emitGpuOperation(line) {
 
     gpuState.hostUploads.push({ scalarType, hostVar, gpuBuffer });
     emitInstruction(`; TOM_GPU_UPLOAD type=${scalarType} host=${hostVar} device=${gpuBuffer}`);
+    trackSystemCost(OP_COSTS.GpuEnv);
     return true;
   }
 
@@ -528,6 +625,7 @@ function emitGpuOperation(line) {
 
     gpuState.hostDownloads.push({ scalarType, gpuBuffer, hostVar });
     emitInstruction(`; TOM_GPU_DOWNLOAD type=${scalarType} device=${gpuBuffer} host=${hostVar}`);
+    trackSystemCost(OP_COSTS.GpuRec);
     return true;
   }
 
@@ -628,6 +726,8 @@ function emitGpuOperation(line) {
   return true;
 }
 
+emitRuntimeBudgetPrelude();
+
 for (const line of lines) {
   if (emitControlFlow(line)) continue;
   if (emitGpuOperation(line)) continue;
@@ -639,6 +739,9 @@ for (const line of lines) {
 
   createError(`Comando não reconhecido: ${line}`);
 }
+
+emitRuntimeBudgetEpilogue();
+emitStaticBudgetWarnings();
 
 if (!firstError && gpuState.currentKernel) {
   createError(`Kernel '${gpuState.currentKernel.name}' não foi finalizado com FimDef.`);
@@ -673,6 +776,11 @@ if (hasSqrt) {
 if (hasExit) {
   output.push('declare void @exit(i32)');
 }
+if (budgetState.runtimeInstrumentation || budgetState.systems.length > 0) {
+  output.push('declare i64 @llvm.readcyclecounter()');
+  output.push('declare void @TomBudgetManager_Report(i8*, i64)');
+  output.push('@TomPerf_StressLevel = external global i32');
+}
 
 output.push('', 'define i32 @main() {', 'entry:');
 output.push(...irLines);
@@ -696,18 +804,25 @@ fs.writeFileSync(outputPath, llvmOutput);
 console.log(`Compilação concluída para '${inputFile}'. Arquivo '${outputPath}' gerado.`);
 
 if (budgetState.frameTargetFps || budgetState.systems.length || budgetState.priorities.length) {
-  console.log('\nTom Live Budget (base inicial):');
+  console.log('\nTom Live Budget (base híbrida):');
   if (budgetState.frameTargetFps) {
     console.log(`- Target FPS: ${budgetState.frameTargetFps}`);
   }
   if (budgetState.systems.length) {
     for (const system of budgetState.systems) {
-      console.log(`- Sistema ${system.name}: máx ${system.maxMs} ms/frame`);
+      const estimated = budgetState.staticCostBySystem.get(system.name) || 0;
+      const maxTomCycles = costToTomCycles(system.maxMs);
+      console.log(`- Sistema ${system.name}: máx ${system.maxMs} ms/frame (~${maxTomCycles} TomCycles), estimado=${estimated} TomCycles`);
     }
   }
   if (budgetState.priorities.length) {
     for (const item of budgetState.priorities) {
       console.log(`- Prioridade ${item.name}: ${item.level}`);
+    }
+  }
+  if (budgetState.staticWarnings.length) {
+    for (const warning of budgetState.staticWarnings) {
+      console.log(`- Warning WCET: ${warning}`);
     }
   }
 }
