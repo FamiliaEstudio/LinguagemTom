@@ -982,5 +982,10 @@ A versão atual do tradutor já cobre um bloco inicial funcional, mantendo a fil
 - Geração de texto no estilo baixo nível (via `printf` no IR):
   - `GerarTxtxl'Mensagem\n'`
   - `GerarTxtUltimo` (imprime a última string concatenada)
+- **Base inicial do Tom Live Budget** (metadados estáticos no compilador):
+  - `DefBudgetFramexyTargetFPSy60`
+  - `DefBudgetSistemaxParticulasyMaxMsy2.0`
+  - `DefPrioridadexJogadory10`
+  - Atualmente o compilador valida os valores, registra no IR (comentários `; TOM_BUDGET_*`) e imprime um resumo no console para servir de fundação da análise WCET em tempo real.
 
 > Dica: para testar rapidamente, edite `tom-lang/teste.tom` e rode `node tom-lang/tomc.js tom-lang/teste.tom`.

@@ -7,6 +7,11 @@ declare i32 @printf(i8*, ...)
 
 define i32 @main() {
 entry:
+  ; TOM_BUDGET_FRAME target_fps=60
+  ; TOM_BUDGET_SYSTEM name=Particulas max_ms=2
+  ; TOM_BUDGET_SYSTEM name=Fisica max_ms=3
+  ; TOM_BUDGET_PRIORITY name=Jogador level=10
+  ; TOM_BUDGET_PRIORITY name=Particulas level=3
   %r1 = add nsw i32 1000, 500
   %r2 = sub i64 1000, 2
   %r3 = fmul float 3.5, 2

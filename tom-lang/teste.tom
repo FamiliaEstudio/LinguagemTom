@@ -1,3 +1,9 @@
+DefBudgetFramexyTargetFPSy60
+DefBudgetSistemaxParticulasyMaxMsy2.0
+DefBudgetSistemaxFisicayMaxMsy3.0
+DefPrioridadexJogadory10
+DefPrioridadexParticulasy3
+
 SomarxyInSd32x1000y500
 SubtrxyInUd64x1000y2
 MultixyFl32x3.5y2.0

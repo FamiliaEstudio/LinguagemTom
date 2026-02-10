@@ -22,6 +22,11 @@ let lastTextPointer = null;
 let lastTextLength = 0;
 let firstError = null;
 const buffers = new Map();
+const budgetState = {
+  frameTargetFps: null,
+  systems: [],
+  priorities: [],
+};
 
 function nextReg() {
   regCount += 1;
@@ -92,6 +97,52 @@ function parseNumber(value, llvmType, isFloat) {
   }
 
   return String(num);
+}
+
+
+function emitBudgetDirective(line) {
+  const frame = line.match(/^DefBudgetFramexyTargetFPSy(\d+)$/);
+  if (frame) {
+    const fps = Number.parseInt(frame[1], 10);
+    if (!Number.isInteger(fps) || fps <= 0) {
+      createError(`DefBudgetFrame inválido: ${line}`);
+      return true;
+    }
+
+    budgetState.frameTargetFps = fps;
+    irLines.push(`  ; TOM_BUDGET_FRAME target_fps=${fps}`);
+    return true;
+  }
+
+  const system = line.match(/^DefBudgetSistemax([A-Za-z_][A-Za-z0-9_]*)yMaxMsy(-?\d+(?:\.\d+)?)$/);
+  if (system) {
+    const [, name, maxMsRaw] = system;
+    const maxMs = Number.parseFloat(maxMsRaw);
+    if (!Number.isFinite(maxMs) || maxMs <= 0) {
+      createError(`DefBudgetSistema inválido: ${line}`);
+      return true;
+    }
+
+    budgetState.systems.push({ name, maxMs });
+    irLines.push(`  ; TOM_BUDGET_SYSTEM name=${name} max_ms=${maxMs}`);
+    return true;
+  }
+
+  const priority = line.match(/^DefPrioridadex([A-Za-z_][A-Za-z0-9_]*)y(-?\d+)$/);
+  if (priority) {
+    const [, name, levelRaw] = priority;
+    const level = Number.parseInt(levelRaw, 10);
+    if (!Number.isInteger(level) || level < 0) {
+      createError(`DefPrioridade inválida: ${line}`);
+      return true;
+    }
+
+    budgetState.priorities.push({ name, level });
+    irLines.push(`  ; TOM_BUDGET_PRIORITY name=${name} level=${level}`);
+    return true;
+  }
+
+  return false;
 }
 
 function emitNumericOperation(line) {
@@ -314,6 +365,7 @@ function emitText(line) {
 }
 
 for (const line of lines) {
+  if (emitBudgetDirective(line)) continue;
   if (emitNumericOperation(line)) continue;
   if (emitVectorOperation(line)) continue;
   if (emitStringOperation(line)) continue;
@@ -363,6 +415,24 @@ const outputPath = path.join(path.dirname(inputFile), 'output.ll');
 fs.writeFileSync(outputPath, llvmOutput);
 
 console.log(`Compilação concluída para '${inputFile}'. Arquivo '${outputPath}' gerado.`);
+
+if (budgetState.frameTargetFps || budgetState.systems.length || budgetState.priorities.length) {
+  console.log('\nTom Live Budget (base inicial):');
+  if (budgetState.frameTargetFps) {
+    console.log(`- Target FPS: ${budgetState.frameTargetFps}`);
+  }
+  if (budgetState.systems.length) {
+    for (const system of budgetState.systems) {
+      console.log(`- Sistema ${system.name}: máx ${system.maxMs} ms/frame`);
+    }
+  }
+  if (budgetState.priorities.length) {
+    for (const item of budgetState.priorities) {
+      console.log(`- Prioridade ${item.name}: ${item.level}`);
+    }
+  }
+}
+
 if (firstError) {
   console.log(`Aviso: ${firstError}`);
 }
