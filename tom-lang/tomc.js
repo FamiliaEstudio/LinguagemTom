@@ -21,6 +21,7 @@ let lastNumericValue = null;
 let lastTextPointer = null;
 let lastTextLength = 0;
 let firstError = null;
+const buffers = new Map();
 
 function nextReg() {
   regCount += 1;
@@ -61,7 +62,16 @@ function createError(message) {
 
 function parseLiteral(text) {
   const m = text.match(/l'([^']*)'/);
-  return m ? m[1] : null;
+  return m ? decodeTomString(m[1]) : null;
+}
+
+function decodeTomString(text) {
+  return text
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\'/g, "'")
+    .replace(/\\\\/g, '\\');
 }
 
 function parseNumber(value, llvmType, isFloat) {
@@ -184,11 +194,63 @@ function emitVectorOperation(line) {
 }
 
 function emitStringOperation(line) {
+  const defStack = line.match(/^DefStkFB(\d+)(C|U)?x([A-Za-z_][A-Za-z0-9_]*)yl'([^']*)'$/);
+  if (defStack) {
+    const [, capacityRaw, safetyRaw, name, initialRaw] = defStack;
+    const capacity = Number.parseInt(capacityRaw, 10);
+    const checked = !safetyRaw || safetyRaw === 'C';
+    const initial = decodeTomString(initialRaw);
+    const textBytes = Buffer.byteLength(initial, 'utf8') + 1;
+
+    if (checked && textBytes > capacity) {
+      createError(`DefStkFB${capacity}C excedeu capacidade de '${name}' (${textBytes - 1} bytes).`);
+      return true;
+    }
+
+    buffers.set(name, { text: initial, capacity, checked });
+    const strInfo = createGlobalString(initial, 'buf');
+    lastTextPointer = pointerToGlobal(strInfo);
+    lastTextLength = strInfo.len;
+    return true;
+  }
+
+  const appendStack = line.match(/^SomarlFB(\d+)(C|U)?x([A-Za-z_][A-Za-z0-9_]*)yl'([^']*)'$/);
+  if (appendStack) {
+    const [, capacityRaw, safetyRaw, name, chunkRaw] = appendStack;
+    const capacity = Number.parseInt(capacityRaw, 10);
+    const checked = !safetyRaw || safetyRaw === 'C';
+    const chunk = decodeTomString(chunkRaw);
+    const current = buffers.get(name);
+
+    if (!current) {
+      createError(`Buffer '${name}' não foi definido antes de SomarlFB.`);
+      return true;
+    }
+
+    if (current.capacity !== capacity || current.checked !== checked) {
+      createError(`SomarlFB em '${name}' não corresponde à configuração do DefStk (${line}).`);
+      return true;
+    }
+
+    const merged = `${current.text}${chunk}`;
+    const textBytes = Buffer.byteLength(merged, 'utf8') + 1;
+    if (checked && textBytes > capacity) {
+      createError(`SomarlFB${capacity}C causou overflow em '${name}' (${textBytes - 1} bytes).`);
+      return true;
+    }
+
+    buffers.set(name, { ...current, text: merged });
+    const strInfo = createGlobalString(merged, 'buf');
+    lastTextPointer = pointerToGlobal(strInfo);
+    lastTextLength = strInfo.len;
+    return true;
+  }
+
   const sm = line.match(/^Somarl(I8|UT|FB(\d+)(C|U)?)xyxl'([^']*)'yl'([^']*)'$/);
   if (!sm) return false;
 
   const [, mode, fbSizeRaw, safetyRaw, left, right] = sm;
-  const text = `${left}${right}`;
+  const text = `${decodeTomString(left)}${decodeTomString(right)}`;
 
   if (mode.startsWith('FB')) {
     const capacity = Number.parseInt(fbSizeRaw, 10);
@@ -225,10 +287,26 @@ function emitText(line) {
   }
 
   const lm = line.match(/^GerarTxtxl'([^']*)'$/);
-  if (!lm) return false;
+  if (lm) {
+    const txt = decodeTomString(lm[1]);
+    const info = createGlobalString(txt, 'txt');
+    const ptr = pointerToGlobal(info);
+    hasPrintf = true;
+    irLines.push(`  call i32 (i8*, ...) @printf(i8* ${ptr})`);
+    return true;
+  }
 
-  const txt = lm[1];
-  const info = createGlobalString(txt, 'txt');
+  const vm = line.match(/^GerarTxtx([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (!vm) return false;
+
+  const [, name] = vm;
+  const current = buffers.get(name);
+  if (!current) {
+    createError(`GerarTxtx${name} falhou: buffer não encontrado.`);
+    return true;
+  }
+
+  const info = createGlobalString(current.text, 'txt');
   const ptr = pointerToGlobal(info);
   hasPrintf = true;
   irLines.push(`  call i32 (i8*, ...) @printf(i8* ${ptr})`);
