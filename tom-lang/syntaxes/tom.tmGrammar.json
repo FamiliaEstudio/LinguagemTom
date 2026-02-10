@@ -2,13 +2,13 @@
     "scopeName": "source.tom",
     "patterns": [
         {
-            "comment": "CMD: Comandos Fixos (Palavras-chave)",
-            "match": "\\b(Somar|Subtr|Multi|Divid|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefZn|DefKernel|FimDef|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuRec|SEProv|SEImpr)\\b",
+            "comment": "CMD: Comandos Fixos - Agora aceitam estar colados em x, y, l",
+            "match": "\\b(Somar|Subtr|Multi|Divid|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefZn|DefKernel|FimDef|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuRec|SEProv|SEImpr)(?=[xylA-Z])?",
             "name": "keyword.control.tom"
         },
         {
-            "comment": "OPC: Opções Selecionáveis (Tipos, Modos, Tamanhos)",
-            "match": "\\b(In|Fl|Sd|Ud|32|64|128|Vec4|Vec8|Esc|Hp|Stk|Zn|FB64C|FB64U|FB64|I8|UT)\\b",
+            "comment": "OPC: Opções - Removido o limite de palavra para funcionar no meio da frase (ex: InSd32)",
+            "match": "(?<![a-z])(In|Fl|Sd|Ud|32|64|128|Vec4|Vec8|Esc|Hp|Stk|Zn|FB64C|FB64U|FB64|I8|UT)(?=[A-Z0-9xy]|$)",
             "name": "storage.type.tom"
         },
         {
@@ -17,7 +17,7 @@
             "name": "string.quoted.single.tom"
         },
         {
-            "comment": "INP: Números Hexadecimais (Ponteiros/Endereços)",
+            "comment": "INP: Números Hexadecimais",
             "match": "\\b0x[0-9A-Fa-f]+\\b|@[0-9A-Fa-fXx]+",
             "name": "constant.numeric.hex.tom"
         },
@@ -27,14 +27,14 @@
             "name": "constant.numeric.tom"
         },
         {
-            "comment": "INP: Variáveis (Inputs do usuário após separadores)",
-            "match": "(?<=x|y|z|@)[a-zA-Z][a-zA-Z0-9_]*",
-            "name": "variable.parameter.tom"
+            "comment": "Separadores (x, y, z, l) - Usados como pontuação",
+            "match": "(x|y|z|l)",
+            "name": "punctuation.separator.tom"
         },
         {
-            "comment": "Separadores (x, y, z, l)",
-            "match": "(?<=.)(x|y|z|l)(?=.)",
-            "name": "punctuation.separator.tom"
+            "comment": "INP: Variáveis genéricas (tudo que sobrou que começa com letra)",
+            "match": "\\b[a-zA-Z][a-zA-Z0-9_]*\\b",
+            "name": "variable.parameter.tom"
         }
     ]
 }
