@@ -988,4 +988,10 @@ A versão atual do tradutor já cobre um bloco inicial funcional, mantendo a fil
   - `DefPrioridadexJogadory10`
   - Atualmente o compilador valida os valores, registra no IR (comentários `; TOM_BUDGET_*`) e imprime um resumo no console para servir de fundação da análise WCET em tempo real.
 
+- **Indicativos visuais no IDE (VS Code)**:
+  - A extensão agora ativa automaticamente um analisador de Tom Live Budget em arquivos `.tom`.
+  - Diretivas de budget recebem um marcador visual `← Tom Live Budget` ao final da linha.
+  - Erros e avisos aparecem no painel *Problems* (FPS inválido, `MaxMs <= 0`, duplicidade de sistema e prioridade fora de faixa sugerida).
+  - Cada diretiva mostra *hover* contextual com resumo de orçamento (FPS em ms/frame, limite por sistema e nível de prioridade).
+
 > Dica: para testar rapidamente, edite `tom-lang/teste.tom` e rode `node tom-lang/tomc.js tom-lang/teste.tom`.
