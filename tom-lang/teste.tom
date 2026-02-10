@@ -1,1 +1,9 @@
-SomarxyFl32x1000y1000
+SomarxyInSd32x1000y500
+SubtrxyInUd64x1000y2
+MultixyFl32x3.5y2.0
+DividxyFl64x22.0y7.0
+SomarVec4In32x[10,20,30,40]y[1,2,3,4]
+SomarlI8xyxl'Meriadok 'yl'Aiko\n'
+SomarlFB16Cxyxl'Hi 'yl'Tom\n'
+GerarTxtUltimo
+GerarTxtxl'Compilador Tom -> LLVM IR ativo!\n'

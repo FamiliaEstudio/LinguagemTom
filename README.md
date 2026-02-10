@@ -966,3 +966,21 @@ Para a "Linguagem Tom", que já tem essa filosofia de "você precisa saber o que
 
 
 
+
+## Status atual do compilador LLVM IR (`tom-lang/tomc.js`)
+A versão atual do tradutor já cobre um bloco inicial funcional, mantendo a filosofia linear da Tom:
+
+- Operações numéricas escalares:
+  - `SomarxyInSd32x10y20`, `SubtrxyInUd64x100y2`, `MultixyFl32x3.5y2.0`, `DividxyFl64x22.0y7.0`.
+- Vetores SIMD base (`Vec4`):
+  - `SomarVec4In32x[10,20,30,40]y[1,2,3,4]`.
+- Concatenação de strings literais:
+  - `SomarlI8xyxl'Meriadok'yl'Aiko'`
+  - `SomarlUTxyxl'Olá 'yl'Tom'`
+  - `SomarlFB64Cxyxl'Hi 'yl'Player'` (checked)
+  - `SomarlFB64Uxyxl'Hi 'yl'Player'` (unchecked)
+- Geração de texto no estilo baixo nível (via `printf` no IR):
+  - `GerarTxtxl'Mensagem\n'`
+  - `GerarTxtUltimo` (imprime a última string concatenada)
+
+> Dica: para testar rapidamente, edite `tom-lang/teste.tom` e rode `node tom-lang/tomc.js tom-lang/teste.tom`.
