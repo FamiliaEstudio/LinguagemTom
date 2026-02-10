@@ -17,11 +17,14 @@ let hasPrintf = false;
 let hasSqrtf = false;
 let hasSqrt = false;
 let hasExit = false;
+let hasScanf = false;
 let lastNumericValue = null;
 let lastTextPointer = null;
 let lastTextLength = 0;
 let firstError = null;
 const buffers = new Map();
+const numericVars = new Map();
+const textVars = new Map();
 const budgetState = {
   frameTargetFps: null,
   systems: [],
@@ -166,6 +169,54 @@ function parseNumber(value, llvmType, isFloat) {
   return String(num);
 }
 
+function resolveNumericOperand(raw, llvmType, isFloat) {
+  if (raw.startsWith('@')) {
+    const name = raw.slice(1);
+
+    if (name === 'ULTIMO') {
+      if (!lastNumericValue) {
+        return { error: "'@ULTIMO' usado sem resultado numérico anterior." };
+      }
+      if (lastNumericValue.llvmType !== llvmType) {
+        return { error: `Tipo incompatível em '@ULTIMO': esperado ${llvmType}, encontrado ${lastNumericValue.llvmType}.` };
+      }
+      return { value: lastNumericValue.reg };
+    }
+
+    const variable = numericVars.get(name);
+    if (!variable) {
+      return { error: `Variável numérica '${name}' não foi definida.` };
+    }
+    if (variable.llvmType !== llvmType) {
+      return { error: `Tipo incompatível em '@${name}': esperado ${llvmType}, encontrado ${variable.llvmType}.` };
+    }
+
+    const reg = nextReg();
+    emitInstruction(`${reg} = load ${llvmType}, ${llvmType}* ${variable.ptr}`);
+    return { value: reg };
+  }
+
+  const literal = parseNumber(raw, llvmType, isFloat);
+  if (literal === null) {
+    return { error: `Operando inválido '${raw}' para ${llvmType}.` };
+  }
+
+  return { value: literal };
+}
+
+function parseDeclarationValue(raw, llvmType, isFloat) {
+  const parsed = parseNumber(raw, llvmType, isFloat);
+  if (parsed !== null) return parsed;
+
+  if (!raw.startsWith('@')) return null;
+  const source = numericVars.get(raw.slice(1));
+  if (!source || source.llvmType !== llvmType) return null;
+
+  const reg = nextReg();
+  emitInstruction(`${reg} = load ${llvmType}, ${llvmType}* ${source.ptr}`);
+  return reg;
+}
+
 
 
 function parseTomPerfStressRegister(text) {
@@ -269,18 +320,19 @@ function emitBudgetDirective(line) {
 }
 
 function emitNumericOperation(line) {
-  const mathRegex = /^(Somar|Subtr|Multi|Divid)xy(In)(Sd|Ud)(32|64)x(-?\d+)y(-?\d+)$/;
-  const floatRegex = /^(Somar|Subtr|Multi|Divid)xy(Fl)(32|64)x(-?\d+(?:\.\d+)?)y(-?\d+(?:\.\d+)?)$/;
+  const numberOperand = '(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)';
+  const mathRegex = new RegExp(`^(Somar|Subtr|Multi|Divid)xy(In)(Sd|Ud)(32|64)x${numberOperand}y${numberOperand}$`);
+  const floatRegex = new RegExp(`^(Somar|Subtr|Multi|Divid)xy(Fl)(32|64)x${numberOperand}y${numberOperand}$`);
 
   const im = line.match(mathRegex);
   if (im) {
     const [, op, , sign, bits, xRaw, yRaw] = im;
     const llvmType = bits === '32' ? 'i32' : 'i64';
-    const x = parseNumber(xRaw, llvmType, false);
-    const y = parseNumber(yRaw, llvmType, false);
+    const x = resolveNumericOperand(xRaw, llvmType, false);
+    const y = resolveNumericOperand(yRaw, llvmType, false);
 
-    if (x === null || y === null) {
-      createError(`Valor fora do intervalo para ${llvmType}: ${line}`);
+    if (x.error || y.error) {
+      createError(x.error || y.error);
       return true;
     }
 
@@ -293,7 +345,7 @@ function emitNumericOperation(line) {
       Divid: signed ? 'sdiv' : 'udiv',
     };
 
-    emitInstruction(`${reg} = ${opMap[op]} ${llvmType} ${x}, ${y}`);
+    emitInstruction(`${reg} = ${opMap[op]} ${llvmType} ${x.value}, ${y.value}`);
     trackSystemCost(OP_COSTS[op] || 1);
     lastNumericValue = { reg, llvmType };
     return true;
@@ -303,11 +355,11 @@ function emitNumericOperation(line) {
   if (fm) {
     const [, op, , bits, xRaw, yRaw] = fm;
     const llvmType = bits === '32' ? 'float' : 'double';
-    const x = parseNumber(xRaw, llvmType, true);
-    const y = parseNumber(yRaw, llvmType, true);
+    const x = resolveNumericOperand(xRaw, llvmType, true);
+    const y = resolveNumericOperand(yRaw, llvmType, true);
 
-    if (x === null || y === null) {
-      createError(`Valor de ponto flutuante inválido: ${line}`);
+    if (x.error || y.error) {
+      createError(x.error || y.error);
       return true;
     }
 
@@ -319,7 +371,7 @@ function emitNumericOperation(line) {
       Divid: 'fdiv',
     };
 
-    emitInstruction(`${reg} = ${opMap[op]} ${llvmType} ${x}, ${y}`);
+    emitInstruction(`${reg} = ${opMap[op]} ${llvmType} ${x.value}, ${y.value}`);
     trackSystemCost(OP_COSTS[op] || 1);
     lastNumericValue = { reg, llvmType };
     return true;
@@ -428,10 +480,13 @@ function emitControlFlow(line) {
     }
 
     const llvmType = bits === '32' ? 'i32' : 'i64';
-    const left = parseNumber(leftRaw, llvmType, false) ?? parseTomPerfStressRegister(leftRaw);
-    const right = parseNumber(rightRaw, llvmType, false) ?? parseTomPerfStressRegister(rightRaw);
-    if (left === null || right === null) {
-      createError(`Comparação inválida para ${llvmType}: ${line}`);
+    const left = resolveNumericOperand(leftRaw, llvmType, false);
+    const right = resolveNumericOperand(rightRaw, llvmType, false);
+    const leftValue = left.error ? parseTomPerfStressRegister(leftRaw) : left.value;
+    const rightValue = right.error ? parseTomPerfStressRegister(rightRaw) : right.value;
+
+    if (leftValue === null || rightValue === null || leftValue === undefined || rightValue === undefined) {
+      createError(left.error || right.error || `Comparação inválida para ${llvmType}: ${line}`);
       return true;
     }
 
@@ -439,9 +494,147 @@ function emitControlFlow(line) {
     const cmp = sign === 'Sd' ? 'sgt' : 'ugt';
     const trueLabel = nextLabel('se_maior_verdadeiro');
 
-    emitInstruction(`${condReg} = icmp ${cmp} ${llvmType} ${left}, ${right}`);
+    emitInstruction(`${condReg} = icmp ${cmp} ${llvmType} ${leftValue}, ${rightValue}`);
     terminateCurrentBlock(`br i1 ${condReg}, label %${trueLabel}, label %${activeScope.endLabel}`);
     emitLabel(trueLabel);
+    return true;
+  }
+
+  return false;
+}
+
+function emitDataOperation(line) {
+  const decl = line.match(/^DefVar(In)(Sd|Ud)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([^\s]+)$/);
+  if (decl) {
+    const [, , , bits, name, valueRaw] = decl;
+    const llvmType = bits === '32' ? 'i32' : 'i64';
+    const value = parseDeclarationValue(valueRaw, llvmType, false);
+    if (value === null) {
+      createError(`DefVar inválido para ${llvmType}: ${line}`);
+      return true;
+    }
+
+    const ptr = nextReg();
+    emitInstruction(`${ptr} = alloca ${llvmType}`);
+    emitInstruction(`store ${llvmType} ${value}, ${llvmType}* ${ptr}`);
+    numericVars.set(name, { llvmType, ptr });
+    return true;
+  }
+
+  const declFloat = line.match(/^DefVar(Fl)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([^\s]+)$/);
+  if (declFloat) {
+    const [, , bits, name, valueRaw] = declFloat;
+    const llvmType = bits === '32' ? 'float' : 'double';
+    const value = parseDeclarationValue(valueRaw, llvmType, true);
+    if (value === null) {
+      createError(`DefVar inválido para ${llvmType}: ${line}`);
+      return true;
+    }
+
+    const ptr = nextReg();
+    emitInstruction(`${ptr} = alloca ${llvmType}`);
+    emitInstruction(`store ${llvmType} ${value}, ${llvmType}* ${ptr}`);
+    numericVars.set(name, { llvmType, ptr });
+    return true;
+  }
+
+  const setInt = line.match(/^SetVar(In)(Sd|Ud)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([^\s]+)$/);
+  if (setInt) {
+    const [, , , bits, name, valueRaw] = setInt;
+    const llvmType = bits === '32' ? 'i32' : 'i64';
+    const target = numericVars.get(name);
+    if (!target) {
+      createError(`SetVar falhou: variável '${name}' não foi definida.`);
+      return true;
+    }
+    if (target.llvmType !== llvmType) {
+      createError(`SetVar incompatível: '${name}' é ${target.llvmType}, comando usa ${llvmType}.`);
+      return true;
+    }
+
+    const valueRes = resolveNumericOperand(valueRaw, llvmType, false);
+    if (valueRes.error) {
+      createError(valueRes.error);
+      return true;
+    }
+
+    emitInstruction(`store ${llvmType} ${valueRes.value}, ${llvmType}* ${target.ptr}`);
+    lastNumericValue = { reg: valueRes.value, llvmType };
+    return true;
+  }
+
+  const setFloat = line.match(/^SetVar(Fl)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([^\s]+)$/);
+  if (setFloat) {
+    const [, , bits, name, valueRaw] = setFloat;
+    const llvmType = bits === '32' ? 'float' : 'double';
+    const target = numericVars.get(name);
+    if (!target) {
+      createError(`SetVar falhou: variável '${name}' não foi definida.`);
+      return true;
+    }
+    if (target.llvmType !== llvmType) {
+      createError(`SetVar incompatível: '${name}' é ${target.llvmType}, comando usa ${llvmType}.`);
+      return true;
+    }
+
+    const valueRes = resolveNumericOperand(valueRaw, llvmType, true);
+    if (valueRes.error) {
+      createError(valueRes.error);
+      return true;
+    }
+
+    emitInstruction(`store ${llvmType} ${valueRes.value}, ${llvmType}* ${target.ptr}`);
+    lastNumericValue = { reg: valueRes.value, llvmType };
+    return true;
+  }
+
+  const readInt = line.match(/^LerEntradaIn(Sd|Ud)(32|64)x([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (readInt) {
+    const [, , bits, name] = readInt;
+    const llvmType = bits === '32' ? 'i32' : 'i64';
+    const target = numericVars.get(name);
+    if (!target) {
+      createError(`LerEntrada falhou: variável '${name}' não foi definida.`);
+      return true;
+    }
+    if (target.llvmType !== llvmType) {
+      createError(`LerEntrada incompatível: '${name}' é ${target.llvmType}, comando usa ${llvmType}.`);
+      return true;
+    }
+
+    hasScanf = true;
+    const fmtInfo = createGlobalString(bits === '32' ? '%d' : '%lld', 'scanfmt');
+    const fmtPtr = pointerToGlobal(fmtInfo);
+    emitInstruction(`call i32 (i8*, ...) @scanf(i8* ${fmtPtr}, ${llvmType}* ${target.ptr})`);
+    return true;
+  }
+
+  const textDef = line.match(/^DefTxtx([A-Za-z_][A-Za-z0-9_]*)yl'([^']*)'$/);
+  if (textDef) {
+    const [, name, raw] = textDef;
+    textVars.set(name, decodeTomString(raw));
+    return true;
+  }
+
+  const textSet = line.match(/^SetTxtx([A-Za-z_][A-Za-z0-9_]*)yl'([^']*)'$/);
+  if (textSet) {
+    const [, name, raw] = textSet;
+    if (!textVars.has(name)) {
+      createError(`SetTxt falhou: texto '${name}' não foi definido.`);
+      return true;
+    }
+    textVars.set(name, decodeTomString(raw));
+    return true;
+  }
+
+  const textConcat = line.match(/^SomarTxtx([A-Za-z_][A-Za-z0-9_]*)yl'([^']*)'$/);
+  if (textConcat) {
+    const [, name, raw] = textConcat;
+    if (!textVars.has(name)) {
+      createError(`SomarTxt falhou: texto '${name}' não foi definido.`);
+      return true;
+    }
+    textVars.set(name, `${textVars.get(name)}${decodeTomString(raw)}`);
     return true;
   }
 
@@ -555,13 +748,15 @@ function emitText(line) {
   if (!vm) return false;
 
   const [, name] = vm;
-  const current = buffers.get(name);
-  if (!current) {
-    createError(`GerarTxtx${name} falhou: buffer não encontrado.`);
+  const bufferText = buffers.get(name)?.text;
+  const namedText = textVars.get(name);
+  const printable = bufferText ?? namedText;
+  if (printable === undefined) {
+    createError(`GerarTxtx${name} falhou: texto/buffer não encontrado.`);
     return true;
   }
 
-  const info = createGlobalString(current.text, 'txt');
+  const info = createGlobalString(printable, 'txt');
   const ptr = pointerToGlobal(info);
   hasPrintf = true;
   emitInstruction(`call i32 (i8*, ...) @printf(i8* ${ptr})`);
@@ -732,6 +927,7 @@ for (const line of lines) {
   if (emitControlFlow(line)) continue;
   if (emitGpuOperation(line)) continue;
   if (emitBudgetDirective(line)) continue;
+  if (emitDataOperation(line)) continue;
   if (emitNumericOperation(line)) continue;
   if (emitVectorOperation(line)) continue;
   if (emitStringOperation(line)) continue;
@@ -766,6 +962,9 @@ if (globals.length > 0) {
 }
 if (hasPrintf) {
   output.push('declare i32 @printf(i8*, ...)');
+}
+if (hasScanf) {
+  output.push('declare i32 @scanf(i8*, ...)');
 }
 if (hasSqrtf) {
   output.push('declare float @llvm.sqrt.f32(float)');

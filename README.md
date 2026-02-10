@@ -999,3 +999,16 @@ A versão atual do tradutor já cobre um bloco inicial funcional, mantendo a fil
 ## Guia prático
 
 - Subsídios para criar RPG de texto com imagens, telas, nomes, valores e cálculos em Tom: `RPG_TOM_GUIA.md`.
+
+## Suporte prático para RPG textual (estado + input + cenas)
+
+Para viabilizar o fluxo do `RPG_TOM_GUIA.md`, o compilador Tom agora aceita comandos de estado persistente e entrada de jogador:
+
+- `DefVarInSd32xpl_hp_atualy34` (declara variável numérica de estado)
+- `SetVarInSd32xpl_hp_atualy@ULTIMO` (atualiza variável usando último resultado numérico)
+- `LerEntradaInSd32xacao_escolhida` (lê escolha numérica do usuário)
+- `DefTxtxcn_imagem_refyl'[IMG: caverna_entrada.png]'` (texto nomeado para cena/imagem)
+- `SetTxtxcn_narrativayl'novo texto'` e `SomarTxtxcn_narrativayl'...'` (mutação narrativa)
+- `GerarTxtxcn_narrativa` (renderiza texto nomeado)
+
+Com isso, a Tom fica apta para o vertical slice de RPG (estado de jogador/inimigo, parsing básico de comando, loop/ramificação e mapeamento `id_cena -> imagem_ref` textual).
