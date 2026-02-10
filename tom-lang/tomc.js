@@ -36,10 +36,48 @@ const gpuState = {
   dispatches: [],
   currentKernel: null,
 };
+const controlState = {
+  scopeStack: [],
+  nextLabelId: 0,
+  currentBlock: 'entry',
+  blockTerminated: false,
+};
 
 function nextReg() {
   regCount += 1;
   return `%r${regCount}`;
+}
+
+function sanitizeLabel(label) {
+  return label.replace(/[^A-Za-z0-9_]/g, '_');
+}
+
+function nextLabel(prefix) {
+  controlState.nextLabelId += 1;
+  return `${prefix}_${controlState.nextLabelId}`;
+}
+
+function emitInstruction(instruction) {
+  if (controlState.blockTerminated) {
+    createError(`Bloco '${controlState.currentBlock}' já finalizado; instrução inválida: ${instruction}`);
+    return;
+  }
+  irLines.push(`  ${instruction}`);
+}
+
+function terminateCurrentBlock(terminator) {
+  if (controlState.blockTerminated) {
+    createError(`Bloco '${controlState.currentBlock}' já possui terminador.`);
+    return;
+  }
+  irLines.push(`  ${terminator}`);
+  controlState.blockTerminated = true;
+}
+
+function emitLabel(label) {
+  irLines.push(`${label}:`);
+  controlState.currentBlock = label;
+  controlState.blockTerminated = false;
 }
 
 function escapeLlvmString(text) {
@@ -62,8 +100,8 @@ function createGlobalString(text, prefix = 'str') {
 
 function pointerToGlobal(globalInfo) {
   const reg = nextReg();
-  irLines.push(
-    `  ${reg} = getelementptr inbounds [${globalInfo.len} x i8], [${globalInfo.len} x i8]* ${globalInfo.name}, i64 0, i64 0`,
+  emitInstruction(
+    `${reg} = getelementptr inbounds [${globalInfo.len} x i8], [${globalInfo.len} x i8]* ${globalInfo.name}, i64 0, i64 0`,
   );
   return reg;
 }
@@ -119,7 +157,7 @@ function emitBudgetDirective(line) {
     }
 
     budgetState.frameTargetFps = fps;
-    irLines.push(`  ; TOM_BUDGET_FRAME target_fps=${fps}`);
+    emitInstruction(`; TOM_BUDGET_FRAME target_fps=${fps}`);
     return true;
   }
 
@@ -133,7 +171,7 @@ function emitBudgetDirective(line) {
     }
 
     budgetState.systems.push({ name, maxMs });
-    irLines.push(`  ; TOM_BUDGET_SYSTEM name=${name} max_ms=${maxMs}`);
+    emitInstruction(`; TOM_BUDGET_SYSTEM name=${name} max_ms=${maxMs}`);
     return true;
   }
 
@@ -147,7 +185,7 @@ function emitBudgetDirective(line) {
     }
 
     budgetState.priorities.push({ name, level });
-    irLines.push(`  ; TOM_BUDGET_PRIORITY name=${name} level=${level}`);
+    emitInstruction(`; TOM_BUDGET_PRIORITY name=${name} level=${level}`);
     return true;
   }
 
@@ -179,7 +217,7 @@ function emitNumericOperation(line) {
       Divid: signed ? 'sdiv' : 'udiv',
     };
 
-    irLines.push(`  ${reg} = ${opMap[op]} ${llvmType} ${x}, ${y}`);
+    emitInstruction(`${reg} = ${opMap[op]} ${llvmType} ${x}, ${y}`);
     lastNumericValue = { reg, llvmType };
     return true;
   }
@@ -204,7 +242,7 @@ function emitNumericOperation(line) {
       Divid: 'fdiv',
     };
 
-    irLines.push(`  ${reg} = ${opMap[op]} ${llvmType} ${x}, ${y}`);
+    emitInstruction(`${reg} = ${opMap[op]} ${llvmType} ${x}, ${y}`);
     lastNumericValue = { reg, llvmType };
     return true;
   }
@@ -249,8 +287,69 @@ function emitVectorOperation(line) {
     Divid: 'sdiv',
   };
 
-  irLines.push(`  ${reg} = ${opMap[op]} ${llvmVecType} <${lhs.map((n) => `${llvmElemType} ${n}`).join(', ')}>, <${rhs.map((n) => `${llvmElemType} ${n}`).join(', ')}>`);
+  emitInstruction(`${reg} = ${opMap[op]} ${llvmVecType} <${lhs.map((n) => `${llvmElemType} ${n}`).join(', ')}>, <${rhs.map((n) => `${llvmElemType} ${n}`).join(', ')}>`);
   return true;
+}
+
+function emitControlFlow(line) {
+  const scopeStart = line.match(/^EscopoInix([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (scopeStart) {
+    const [, scopeName] = scopeStart;
+    const safe = sanitizeLabel(scopeName);
+    const scope = {
+      scopeName,
+      startLabel: nextLabel(`escopo_${safe}_ini`),
+      endLabel: nextLabel(`escopo_${safe}_fim`),
+    };
+
+    terminateCurrentBlock(`br label %${scope.startLabel}`);
+    emitLabel(scope.startLabel);
+    controlState.scopeStack.push(scope);
+    return true;
+  }
+
+  const scopeEnd = line.match(/^EscopoFimx([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (scopeEnd) {
+    const [, scopeName] = scopeEnd;
+    const currentScope = controlState.scopeStack.pop();
+    if (!currentScope || currentScope.scopeName !== scopeName) {
+      createError(`EscopoFim inválido: esperado '${currentScope ? currentScope.scopeName : 'nenhum'}', recebido '${scopeName}'.`);
+      return true;
+    }
+
+    terminateCurrentBlock(`br label %${currentScope.endLabel}`);
+    emitLabel(currentScope.endLabel);
+    return true;
+  }
+
+  const greater = line.match(/^SeMaiorxyIn(Sd|Ud)(32|64)x(-?\d+)y(-?\d+)$/);
+  if (greater) {
+    const [, sign, bits, leftRaw, rightRaw] = greater;
+    const activeScope = controlState.scopeStack[controlState.scopeStack.length - 1];
+    if (!activeScope) {
+      createError(`SeMaior precisa estar dentro de um EscopoIni/EscopoFim: ${line}`);
+      return true;
+    }
+
+    const llvmType = bits === '32' ? 'i32' : 'i64';
+    const left = parseNumber(leftRaw, llvmType, false);
+    const right = parseNumber(rightRaw, llvmType, false);
+    if (left === null || right === null) {
+      createError(`Comparação inválida para ${llvmType}: ${line}`);
+      return true;
+    }
+
+    const condReg = nextReg();
+    const cmp = sign === 'Sd' ? 'sgt' : 'ugt';
+    const trueLabel = nextLabel('se_maior_verdadeiro');
+
+    emitInstruction(`${condReg} = icmp ${cmp} ${llvmType} ${left}, ${right}`);
+    terminateCurrentBlock(`br i1 ${condReg}, label %${trueLabel}, label %${activeScope.endLabel}`);
+    emitLabel(trueLabel);
+    return true;
+  }
+
+  return false;
 }
 
 function emitStringOperation(line) {
@@ -322,8 +421,8 @@ function emitStringOperation(line) {
       const errInfo = createGlobalString(`Erro FB${capacity}C: overflow de buffer (${textBytes - 1} bytes).`, 'err');
       const errPtr = pointerToGlobal(errInfo);
       hasPrintf = true;
-      irLines.push(`  call i32 (i8*, ...) @printf(i8* ${errPtr})`);
-      irLines.push('  call void @exit(i32 1)');
+      emitInstruction(`call i32 (i8*, ...) @printf(i8* ${errPtr})`);
+      emitInstruction('call void @exit(i32 1)');
     }
   }
 
@@ -342,7 +441,7 @@ function emitText(line) {
       const empty = createGlobalString('', 'empty');
       lastTextPointer = pointerToGlobal(empty);
     }
-    irLines.push(`  call i32 (i8*, ...) @printf(i8* ${lastTextPointer})`);
+    emitInstruction(`call i32 (i8*, ...) @printf(i8* ${lastTextPointer})`);
     return true;
   }
 
@@ -352,7 +451,7 @@ function emitText(line) {
     const info = createGlobalString(txt, 'txt');
     const ptr = pointerToGlobal(info);
     hasPrintf = true;
-    irLines.push(`  call i32 (i8*, ...) @printf(i8* ${ptr})`);
+    emitInstruction(`call i32 (i8*, ...) @printf(i8* ${ptr})`);
     return true;
   }
 
@@ -369,7 +468,7 @@ function emitText(line) {
   const info = createGlobalString(current.text, 'txt');
   const ptr = pointerToGlobal(info);
   hasPrintf = true;
-  irLines.push(`  call i32 (i8*, ...) @printf(i8* ${ptr})`);
+  emitInstruction(`call i32 (i8*, ...) @printf(i8* ${ptr})`);
   return true;
 }
 
@@ -390,7 +489,7 @@ function emitGpuOperation(line) {
 
     const scalarType = `${typePrefix}${bits}`;
     gpuState.buffers.set(name, { scalarType, count });
-    irLines.push(`  ; TOM_GPU_BUFFER_CREATE name=${name} type=${scalarType} count=${count}`);
+    emitInstruction(`; TOM_GPU_BUFFER_CREATE name=${name} type=${scalarType} count=${count}`);
     return true;
   }
 
@@ -409,7 +508,7 @@ function emitGpuOperation(line) {
     }
 
     gpuState.hostUploads.push({ scalarType, hostVar, gpuBuffer });
-    irLines.push(`  ; TOM_GPU_UPLOAD type=${scalarType} host=${hostVar} device=${gpuBuffer}`);
+    emitInstruction(`; TOM_GPU_UPLOAD type=${scalarType} host=${hostVar} device=${gpuBuffer}`);
     return true;
   }
 
@@ -428,7 +527,7 @@ function emitGpuOperation(line) {
     }
 
     gpuState.hostDownloads.push({ scalarType, gpuBuffer, hostVar });
-    irLines.push(`  ; TOM_GPU_DOWNLOAD type=${scalarType} device=${gpuBuffer} host=${hostVar}`);
+    emitInstruction(`; TOM_GPU_DOWNLOAD type=${scalarType} device=${gpuBuffer} host=${hostVar}`);
     return true;
   }
 
@@ -444,7 +543,7 @@ function emitGpuOperation(line) {
     gpuState.currentKernel = kernel;
     gpuState.kernels.set(kernelName, kernel);
     gpuState.kernelOrder.push(kernelName);
-    irLines.push(`  ; TOM_GPU_KERNEL_BEGIN name=${kernelName}`);
+    emitInstruction(`; TOM_GPU_KERNEL_BEGIN name=${kernelName}`);
     return true;
   }
 
@@ -454,7 +553,7 @@ function emitGpuOperation(line) {
       return true;
     }
 
-    irLines.push(`  ; TOM_GPU_KERNEL_END name=${gpuState.currentKernel.name}`);
+    emitInstruction(`; TOM_GPU_KERNEL_END name=${gpuState.currentKernel.name}`);
     gpuState.currentKernel = null;
     return true;
   }
@@ -474,7 +573,7 @@ function emitGpuOperation(line) {
     }
 
     gpuState.dispatches.push({ kernelName, x: dims[0], y: dims[1], z: dims[2] });
-    irLines.push(`  ; TOM_GPU_DISPATCH kernel=${kernelName} x=${dims[0]} y=${dims[1]} z=${dims[2]}`);
+    emitInstruction(`; TOM_GPU_DISPATCH kernel=${kernelName} x=${dims[0]} y=${dims[1]} z=${dims[2]}`);
     return true;
   }
 
@@ -484,7 +583,7 @@ function emitGpuOperation(line) {
   if (kernelId) {
     const [, idVar] = kernelId;
     gpuState.currentKernel.ops.push({ kind: 'id', idVar });
-    irLines.push(`  ; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=id var=${idVar}`);
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=id var=${idVar}`);
     return true;
   }
 
@@ -498,7 +597,7 @@ function emitGpuOperation(line) {
 
     const scalarType = `${typePrefix}${bits}`;
     gpuState.currentKernel.ops.push({ kind: 'load_vec4', scalarType, bufferName, indexVar, outVar });
-    irLines.push(`  ; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=load_vec4 type=${scalarType} buffer=${bufferName} index=${indexVar} out=${outVar}`);
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=load_vec4 type=${scalarType} buffer=${bufferName} index=${indexVar} out=${outVar}`);
     return true;
   }
 
@@ -512,7 +611,7 @@ function emitGpuOperation(line) {
 
     const scalarType = `${typePrefix}${bits}`;
     gpuState.currentKernel.ops.push({ kind: 'store_vec4', scalarType, bufferName, indexVar, inVar });
-    irLines.push(`  ; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=store_vec4 type=${scalarType} buffer=${bufferName} index=${indexVar} in=${inVar}`);
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=store_vec4 type=${scalarType} buffer=${bufferName} index=${indexVar} in=${inVar}`);
     return true;
   }
 
@@ -521,7 +620,7 @@ function emitGpuOperation(line) {
     const [, op, typePrefix, bits, leftVar, rightVar, outVar] = kernelMath;
     const scalarType = `${typePrefix}${bits}`;
     gpuState.currentKernel.ops.push({ kind: 'math_vec4', op, scalarType, leftVar, rightVar, outVar });
-    irLines.push(`  ; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=${op.toLowerCase()}_vec4 type=${scalarType} left=${leftVar} right=${rightVar} out=${outVar}`);
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=${op.toLowerCase()}_vec4 type=${scalarType} left=${leftVar} right=${rightVar} out=${outVar}`);
     return true;
   }
 
@@ -530,6 +629,7 @@ function emitGpuOperation(line) {
 }
 
 for (const line of lines) {
+  if (emitControlFlow(line)) continue;
   if (emitGpuOperation(line)) continue;
   if (emitBudgetDirective(line)) continue;
   if (emitNumericOperation(line)) continue;
@@ -544,12 +644,17 @@ if (!firstError && gpuState.currentKernel) {
   createError(`Kernel '${gpuState.currentKernel.name}' não foi finalizado com FimDef.`);
 }
 
+if (!firstError && controlState.scopeStack.length > 0) {
+  const openScopes = controlState.scopeStack.map((scope) => scope.scopeName).join(', ');
+  createError(`Escopos não finalizados: ${openScopes}`);
+}
+
 if (firstError) {
   const errInfo = createGlobalString(`Erro de compilação: ${firstError}\n`, 'fatal');
   const errPtr = pointerToGlobal(errInfo);
   hasPrintf = true;
-  irLines.push(`  call i32 (i8*, ...) @printf(i8* ${errPtr})`);
-  irLines.push('  ret i32 1');
+  emitInstruction(`call i32 (i8*, ...) @printf(i8* ${errPtr})`);
+  terminateCurrentBlock('ret i32 1');
 }
 
 const output = [];
@@ -573,9 +678,13 @@ output.push('', 'define i32 @main() {', 'entry:');
 output.push(...irLines);
 
 if (!firstError && lastNumericValue && lastNumericValue.llvmType.startsWith('i')) {
-  output.push(`  ret ${lastNumericValue.llvmType} ${lastNumericValue.reg}`);
+  if (!controlState.blockTerminated) {
+    output.push(`  ret ${lastNumericValue.llvmType} ${lastNumericValue.reg}`);
+  }
 } else if (!firstError) {
-  output.push('  ret i32 0');
+  if (!controlState.blockTerminated) {
+    output.push('  ret i32 0');
+  }
 }
 
 output.push('}');
