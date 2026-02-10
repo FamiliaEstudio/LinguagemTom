@@ -25,5 +25,18 @@ entry:
   call i32 (i8*, ...) @printf(i8* %r8)
   %r10 = getelementptr inbounds [34 x i8], [34 x i8]* @txt4, i64 0, i64 0
   call i32 (i8*, ...) @printf(i8* %r10)
+  ; TOM_GPU_BUFFER_CREATE name=BufPos type=Fl32 count=4000000
+  ; TOM_GPU_BUFFER_CREATE name=BufVel type=Fl32 count=4000000
+  ; TOM_GPU_UPLOAD type=Fl32 host=RamPos device=BufPos
+  ; TOM_GPU_UPLOAD type=Fl32 host=RamVel device=BufVel
+  ; TOM_GPU_KERNEL_BEGIN name=AtualizaParticula
+  ; TOM_GPU_KERNEL_OP kernel=AtualizaParticula op=id var=MeuId
+  ; TOM_GPU_KERNEL_OP kernel=AtualizaParticula op=load_vec4 type=Fl32 buffer=BufPos index=MeuId out=PosAtual
+  ; TOM_GPU_KERNEL_OP kernel=AtualizaParticula op=load_vec4 type=Fl32 buffer=BufVel index=MeuId out=VelAtual
+  ; TOM_GPU_KERNEL_OP kernel=AtualizaParticula op=somar_vec4 type=Fl32 left=PosAtual right=VelAtual out=NovaPos
+  ; TOM_GPU_KERNEL_OP kernel=AtualizaParticula op=store_vec4 type=Fl32 buffer=BufPos index=MeuId in=NovaPos
+  ; TOM_GPU_KERNEL_END name=AtualizaParticula
+  ; TOM_GPU_DISPATCH kernel=AtualizaParticula x=1000000 y=1 z=1
+  ; TOM_GPU_DOWNLOAD type=Fl32 device=BufPos host=RamPos
   ret i32 0
 }
