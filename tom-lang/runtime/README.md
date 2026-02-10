@@ -24,3 +24,23 @@ clang -shared -fPIC ../exemplos/output.ll -o ../exemplos/output.so
 ```
 
 > `-rdynamic` é obrigatório para que o símbolo `TomGpu_Present` definido no host possa ser resolvido pelo módulo carregado via `dlopen`.
+
+
+## Base para backend GPU real (GLSL/SPIR-V)
+
+Além do `output.ll`, o compilador agora gera `output.gpu.json` quando encontra comandos `Gpu*` no `.tom`.
+
+Esse manifesto descreve:
+- buffers, uploads/downloads e dispatches;
+- lista de operações por kernel;
+- `backends.glsl_compute.source` com GLSL computável inicial;
+- bloco `backends.spirv` preparado para a próxima etapa de compilação para SPIR-V.
+
+Uso rápido:
+
+```bash
+node ../tomc.js ../exemplos/gpu_blit.tom
+cat ../exemplos/output.gpu.json
+```
+
+Esse arquivo é a ponte para um runtime futuro que fará compilação e execução real na GPU (Vulkan/OpenGL/WebGPU), sem depender do raster sequencial em CPU.
