@@ -43,6 +43,7 @@ const gpuState = {
   kernelOrder: [],
   dispatches: [],
   currentKernel: null,
+  backendManifestVersion: 1,
 };
 const controlState = {
   scopeStack: [],
@@ -217,6 +218,201 @@ function parseDeclarationValue(raw, llvmType, isFloat) {
   const reg = nextReg();
   emitInstruction(`${reg} = load ${llvmType}, ${llvmType}* ${source.ptr}`);
   return reg;
+}
+
+function getScalarBitWidth(scalarType) {
+  const match = scalarType.match(/(32|64)$/);
+  return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function scalarToGlslType(scalarType) {
+  if (scalarType === 'In32') return 'int';
+  if (scalarType === 'Fl32') return 'float';
+  if (scalarType === 'In64') return 'int64_t';
+  if (scalarType === 'Fl64') return 'double';
+  return null;
+}
+
+function buildGlslKernelSource(kernel, buffersByName) {
+  const glsl = [];
+  const varTypes = new Map();
+  const declaredBuffers = new Set();
+  const unsupported = [];
+  const pushConstants = new Set();
+  const intExtRequired = Array.from(buffersByName.values()).some((buffer) => buffer.scalarType === 'In64');
+  const float64ExtRequired = Array.from(buffersByName.values()).some((buffer) => buffer.scalarType === 'Fl64');
+
+  function markExternalSymbol(symbol) {
+    if (!symbol || declaredBuffers.has(symbol) || varTypes.has(symbol)) return;
+    pushConstants.add(symbol);
+  }
+
+  glsl.push('#version 460');
+  if (intExtRequired) glsl.push('#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require');
+  if (float64ExtRequired) glsl.push('#extension GL_ARB_gpu_shader_fp64 : require');
+  glsl.push('');
+  glsl.push('layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;');
+  glsl.push('');
+
+  let bindingIndex = 0;
+  for (const [bufferName, bufferCfg] of buffersByName.entries()) {
+    const glslType = scalarToGlslType(bufferCfg.scalarType);
+    if (!glslType) {
+      unsupported.push(`Tipo de buffer sem mapeamento GLSL: ${bufferCfg.scalarType} (${bufferName})`);
+      continue;
+    }
+    glsl.push(`layout(std430, binding = ${bindingIndex}) buffer TomBuf_${bufferName} { ${glslType} data[]; } ${bufferName};`);
+    declaredBuffers.add(bufferName);
+    bindingIndex += 1;
+  }
+
+  glsl.push('');
+  glsl.push('layout(push_constant) uniform TomPushConstants {');
+  glsl.push('  int _placeholder;');
+  glsl.push('} pc;');
+  glsl.push('');
+  glsl.push('void main() {');
+
+  for (const op of kernel.ops) {
+    if (op.kind === 'id') {
+      varTypes.set(op.idVar, 'uint');
+      glsl.push(`  uint ${op.idVar} = gl_GlobalInvocationID.x;`);
+      continue;
+    }
+
+    if (op.kind === 'load_scalar') {
+      const glslType = scalarToGlslType(op.scalarType);
+      if (!glslType || !declaredBuffers.has(op.bufferName)) {
+        unsupported.push(`load_scalar não suportado: ${op.scalarType} em ${op.bufferName}`);
+        continue;
+      }
+      markExternalSymbol(op.indexVar);
+      varTypes.set(op.outVar, glslType);
+      glsl.push(`  ${glslType} ${op.outVar} = ${op.bufferName}.data[uint(${op.indexVar})];`);
+      continue;
+    }
+
+    if (op.kind === 'store_scalar') {
+      if (!declaredBuffers.has(op.bufferName)) {
+        unsupported.push(`store_scalar sem buffer declarado: ${op.bufferName}`);
+        continue;
+      }
+      markExternalSymbol(op.indexVar);
+      markExternalSymbol(op.inVar);
+      glsl.push(`  ${op.bufferName}.data[uint(${op.indexVar})] = ${op.inVar};`);
+      continue;
+    }
+
+    if (op.kind === 'math_scalar') {
+      const leftType = varTypes.get(op.leftVar) || 'int';
+      const operator = { Somar: '+', Subtr: '-', Multi: '*', Divid: '/' }[op.op];
+      if (!operator) {
+        unsupported.push(`math_scalar op não suportada: ${op.op}`);
+        continue;
+      }
+      markExternalSymbol(op.leftVar);
+      markExternalSymbol(op.rightVar);
+      varTypes.set(op.outVar, leftType);
+      glsl.push(`  ${leftType} ${op.outVar} = ${op.leftVar} ${operator} ${op.rightVar};`);
+      continue;
+    }
+
+    if (op.kind === 'load_vec4' || op.kind === 'store_vec4' || op.kind === 'math_vec4') {
+      unsupported.push(`Operação vetorial ainda não traduzida para GLSL: ${op.kind}`);
+      continue;
+    }
+
+    unsupported.push(`Operação de kernel desconhecida: ${op.kind}`);
+  }
+
+  glsl.push('}');
+
+  if (pushConstants.size > 0) {
+    const pcFields = Array.from(pushConstants).sort().map((name) => `  int ${name.replace(/^pc\./, '')};`).join('\n');
+    const pcBlock = ['layout(push_constant) uniform TomPushConstants {', pcFields, '} pc;'].join('\n');
+    for (let i = 0; i < glsl.length; i += 1) {
+      if (glsl[i] === 'layout(push_constant) uniform TomPushConstants {') {
+        glsl.splice(i, 3, ...pcBlock.split('\n'));
+        break;
+      }
+    }
+    for (let i = 0; i < glsl.length; i += 1) {
+      if (!glsl[i].startsWith('  ')) continue;
+      for (const name of pushConstants) {
+        const cleanName = name.replace(/^pc\./, '');
+        glsl[i] = glsl[i].replace(new RegExp(`\\b${cleanName}\\b`, 'g'), `pc.${cleanName}`);
+      }
+    }
+
+    let normalizePushBlock = false;
+    for (let i = 0; i < glsl.length; i += 1) {
+      if (glsl[i] === 'layout(push_constant) uniform TomPushConstants {') {
+        normalizePushBlock = true;
+        continue;
+      }
+      if (normalizePushBlock && glsl[i] === '} pc;') {
+        normalizePushBlock = false;
+        continue;
+      }
+      if (!normalizePushBlock) continue;
+      glsl[i] = glsl[i].replace(/^\s*int\s+pc\./, '  int ');
+    }
+  }
+
+  return {
+    source: glsl.join('\n'),
+    unsupported,
+  };
+}
+
+
+function buildGpuBackendManifest(inputPath) {
+  if (!gpuState.buffers.size && !gpuState.kernelOrder.length && !gpuState.dispatches.length) {
+    return null;
+  }
+
+  const manifest = {
+    version: gpuState.backendManifestVersion,
+    sourceFile: path.basename(inputPath),
+    generatedAtUtc: new Date().toISOString(),
+    buffers: [],
+    uploads: [...gpuState.hostUploads],
+    downloads: [...gpuState.hostDownloads],
+    dispatches: [...gpuState.dispatches],
+    kernels: [],
+  };
+
+  for (const [name, cfg] of gpuState.buffers.entries()) {
+    manifest.buffers.push({
+      name,
+      scalarType: cfg.scalarType,
+      scalarBits: getScalarBitWidth(cfg.scalarType),
+      count: cfg.count,
+    });
+  }
+
+  for (const kernelName of gpuState.kernelOrder) {
+    const kernel = gpuState.kernels.get(kernelName);
+    const glsl = buildGlslKernelSource(kernel, gpuState.buffers);
+    manifest.kernels.push({
+      name: kernelName,
+      opCount: kernel.ops.length,
+      ops: kernel.ops,
+      backends: {
+        glsl_compute: {
+          entryPoint: 'main',
+          source: glsl.source,
+          unsupported: glsl.unsupported,
+        },
+        spirv: {
+          status: 'pending',
+          notes: 'Backend SPIR-V será gerado a partir do GLSL/IR neste manifesto.',
+        },
+      },
+    });
+  }
+
+  return manifest;
 }
 
 
@@ -1092,7 +1288,16 @@ const llvmOutput = `${output.join('\n')}\n`;
 const outputPath = path.join(path.dirname(inputFile), 'output.ll');
 fs.writeFileSync(outputPath, llvmOutput);
 
+const gpuManifest = buildGpuBackendManifest(inputFile);
+const gpuManifestPath = path.join(path.dirname(inputFile), 'output.gpu.json');
+if (gpuManifest) {
+  fs.writeFileSync(gpuManifestPath, `${JSON.stringify(gpuManifest, null, 2)}\n`);
+}
+
 console.log(`Compilação concluída para '${inputFile}'. Arquivo '${outputPath}' gerado.`);
+if (gpuManifest) {
+  console.log(`Manifesto backend GPU gerado em '${gpuManifestPath}'.`);
+}
 
 if (budgetState.frameTargetFps || budgetState.systems.length || budgetState.priorities.length) {
   console.log('\nTom Live Budget (base híbrida):');
