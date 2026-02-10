@@ -19,6 +19,7 @@ let hasSqrt = false;
 let hasExit = false;
 let hasScanf = false;
 let hasTomGpuPresent = false;
+let hasTomGpuReadInput = false;
 let lastNumericValue = null;
 let lastTextPointer = null;
 let lastTextLength = 0;
@@ -991,6 +992,35 @@ function emitGpuOperation(line) {
     return true;
   }
 
+  const readInput = line.match(/^GpuLerInputIn32xBufferDestinox([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (readInput) {
+    const [, bufferName] = readInput;
+    const target = gpuState.buffers.get(bufferName);
+    if (!target) {
+      createError(`GpuLerInput falhou: buffer '${bufferName}' não foi criado.`);
+      return true;
+    }
+
+    if (target.scalarType !== 'In32') {
+      createError(`GpuLerInput exige buffer In32. '${bufferName}' está como ${target.scalarType}.`);
+      return true;
+    }
+
+    if (target.count < 8) {
+      createError(`GpuLerInput exige buffer com no mínimo 8 inteiros. '${bufferName}' possui ${target.count}.`);
+      return true;
+    }
+
+    if (!target.llvmPtr) {
+      createError(`GpuLerInput falhou: ponteiro LLVM do buffer '${bufferName}' indisponível.`);
+      return true;
+    }
+
+    hasTomGpuReadInput = true;
+    emitInstruction(`call void @TomGpu_LerInput(i32* ${target.llvmPtr})`);
+    return true;
+  }
+
   const present = line.match(/^GpuApresentarx([A-Za-z_][A-Za-z0-9_]*)x([^\s]+)x([^\s]+)$/);
   if (present) {
     const [, bufferName, widthRaw, heightRaw] = present;
@@ -1262,6 +1292,9 @@ if (hasExit) {
 }
 if (hasTomGpuPresent) {
   output.push('declare void @TomGpu_Present(i32*, i32, i32)');
+}
+if (hasTomGpuReadInput) {
+  output.push('declare void @TomGpu_LerInput(i32*)');
 }
 if (budgetState.runtimeInstrumentation || budgetState.systems.length > 0) {
   output.push('declare i64 @llvm.readcyclecounter()');

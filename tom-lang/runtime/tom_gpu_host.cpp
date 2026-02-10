@@ -1,12 +1,19 @@
 #include <SDL2/SDL.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace {
@@ -16,6 +23,25 @@ struct FrameState {
   int height = 0;
   std::atomic<bool> ready{false};
 } g_frame;
+
+std::mutex g_frameMutex;
+
+struct InputState {
+  int32_t mouseX = 0;
+  int32_t mouseY = 0;
+  int32_t mouseButtons = 0;
+  int32_t keyW = 0;
+  int32_t keyA = 0;
+  int32_t keyS = 0;
+  int32_t keyD = 0;
+  int32_t keyUp = 0;
+  int32_t keyDown = 0;
+  int32_t keyLeft = 0;
+  int32_t keyRight = 0;
+};
+
+InputState g_inputState;
+std::mutex g_inputMutex;
 
 SDL_Window* g_window = nullptr;
 SDL_Renderer* g_renderer = nullptr;
@@ -49,6 +75,7 @@ extern "C" void TomGpu_Present(int32_t* buffer_ptr, int32_t width, int32_t heigh
   }
 
   const size_t count = static_cast<size_t>(width) * static_cast<size_t>(height);
+  std::lock_guard<std::mutex> lock(g_frameMutex);
   g_frame.pixels.resize(count);
   std::memcpy(g_frame.pixels.data(), buffer_ptr, count * sizeof(uint32_t));
   g_frame.width = width;
@@ -56,9 +83,71 @@ extern "C" void TomGpu_Present(int32_t* buffer_ptr, int32_t width, int32_t heigh
   g_frame.ready.store(true, std::memory_order_release);
 }
 
+extern "C" void TomGpu_LerInput(int32_t* buffer_destino) {
+  if (buffer_destino == nullptr) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(g_inputMutex);
+  buffer_destino[0] = g_inputState.mouseX;
+  buffer_destino[1] = g_inputState.mouseY;
+  buffer_destino[2] = g_inputState.mouseButtons;
+  buffer_destino[3] = g_inputState.keyW;
+  buffer_destino[4] = g_inputState.keyA;
+  buffer_destino[5] = g_inputState.keyS;
+  buffer_destino[6] = g_inputState.keyD;
+  buffer_destino[7] = g_inputState.keyUp;
+  buffer_destino[8] = g_inputState.keyDown;
+  buffer_destino[9] = g_inputState.keyLeft;
+  buffer_destino[10] = g_inputState.keyRight;
+}
+
+namespace {
+using TomModuleHandle =
+#ifdef _WIN32
+    HMODULE;
+#else
+    void*;
+#endif
+
+TomModuleHandle openTomModule(const char* modulePath) {
+#ifdef _WIN32
+  return LoadLibraryA(modulePath);
+#else
+  return dlopen(modulePath, RTLD_NOW | RTLD_GLOBAL);
+#endif
+}
+
+void* lookupTomSymbol(TomModuleHandle module, const char* symbol) {
+#ifdef _WIN32
+  return reinterpret_cast<void*>(GetProcAddress(module, symbol));
+#else
+  return dlsym(module, symbol);
+#endif
+}
+
+std::string getTomModuleError() {
+#ifdef _WIN32
+  const DWORD errorCode = GetLastError();
+  return "erro Win32=" + std::to_string(errorCode);
+#else
+  const char* error = dlerror();
+  return error ? std::string(error) : std::string("erro desconhecido");
+#endif
+}
+
+void closeTomModule(TomModuleHandle module) {
+#ifdef _WIN32
+  if (module) FreeLibrary(module);
+#else
+  if (module) dlclose(module);
+#endif
+}
+}  // namespace
+
 int main(int argc, char** argv) {
   if (argc < 2) {
-    std::cerr << "Uso: ./tom_gpu_host <modulo_tom.so>" << std::endl;
+    std::cerr << "Uso: ./tom_gpu_host <modulo_tom.(so|dll)>" << std::endl;
     return 1;
   }
 
@@ -70,23 +159,26 @@ int main(int argc, char** argv) {
   g_window = SDL_CreateWindow("TomGPU Raster", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
   g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
-  void* handle = dlopen(argv[1], RTLD_NOW | RTLD_GLOBAL);
+  TomModuleHandle handle = openTomModule(argv[1]);
   if (!handle) {
-    std::cerr << "Falha ao abrir modulo: " << dlerror() << std::endl;
+    std::cerr << "Falha ao abrir modulo: " << getTomModuleError() << std::endl;
     SDL_Quit();
     return 1;
   }
 
   using TomMainFn = int (*)();
-  auto* tomMain = reinterpret_cast<TomMainFn>(dlsym(handle, "main"));
+  auto* tomMain = reinterpret_cast<TomMainFn>(lookupTomSymbol(handle, "main"));
   if (!tomMain) {
     std::cerr << "Simbolo 'main' nao encontrado no modulo Tom." << std::endl;
-    dlclose(handle);
+    closeTomModule(handle);
     SDL_Quit();
     return 1;
   }
 
-  tomMain();
+  std::thread tomThread([tomMain]() {
+    tomMain();
+  });
+  tomThread.detach();
 
   bool running = true;
   while (running) {
@@ -94,10 +186,50 @@ int main(int argc, char** argv) {
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) {
         running = false;
+      } else if (event.type == SDL_MOUSEMOTION) {
+        std::lock_guard<std::mutex> lock(g_inputMutex);
+        g_inputState.mouseX = event.motion.x;
+        g_inputState.mouseY = event.motion.y;
+      } else if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) {
+        std::lock_guard<std::mutex> lock(g_inputMutex);
+        if (event.button.button == SDL_BUTTON_LEFT) {
+          if (event.type == SDL_MOUSEBUTTONDOWN) {
+            g_inputState.mouseButtons |= 1;
+          } else {
+            g_inputState.mouseButtons &= ~1;
+          }
+        }
+        if (event.button.button == SDL_BUTTON_RIGHT) {
+          if (event.type == SDL_MOUSEBUTTONDOWN) {
+            g_inputState.mouseButtons |= 2;
+          } else {
+            g_inputState.mouseButtons &= ~2;
+          }
+        }
       }
     }
 
+    {
+      std::lock_guard<std::mutex> lock(g_inputMutex);
+      int mouseX = 0;
+      int mouseY = 0;
+      SDL_GetMouseState(&mouseX, &mouseY);
+      g_inputState.mouseX = mouseX;
+      g_inputState.mouseY = mouseY;
+
+      const Uint8* keys = SDL_GetKeyboardState(nullptr);
+      g_inputState.keyW = keys[SDL_SCANCODE_W] ? 1 : 0;
+      g_inputState.keyA = keys[SDL_SCANCODE_A] ? 1 : 0;
+      g_inputState.keyS = keys[SDL_SCANCODE_S] ? 1 : 0;
+      g_inputState.keyD = keys[SDL_SCANCODE_D] ? 1 : 0;
+      g_inputState.keyUp = keys[SDL_SCANCODE_UP] ? 1 : 0;
+      g_inputState.keyDown = keys[SDL_SCANCODE_DOWN] ? 1 : 0;
+      g_inputState.keyLeft = keys[SDL_SCANCODE_LEFT] ? 1 : 0;
+      g_inputState.keyRight = keys[SDL_SCANCODE_RIGHT] ? 1 : 0;
+    }
+
     if (g_frame.ready.load(std::memory_order_acquire) && g_frame.width > 0 && g_frame.height > 0) {
+      std::lock_guard<std::mutex> lock(g_frameMutex);
       ensureTexture(g_frame.width, g_frame.height);
       SDL_UpdateTexture(g_texture, nullptr, g_frame.pixels.data(), g_frame.width * static_cast<int>(sizeof(uint32_t)));
       SDL_SetWindowSize(g_window, g_frame.width, g_frame.height);
@@ -112,7 +244,7 @@ int main(int argc, char** argv) {
   if (g_texture) SDL_DestroyTexture(g_texture);
   if (g_renderer) SDL_DestroyRenderer(g_renderer);
   if (g_window) SDL_DestroyWindow(g_window);
-  dlclose(handle);
+  closeTomModule(handle);
   SDL_Quit();
   return 0;
 }
