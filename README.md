@@ -995,3 +995,7 @@ A versão atual do tradutor já cobre um bloco inicial funcional, mantendo a fil
   - Cada diretiva mostra *hover* contextual com resumo de orçamento (FPS em ms/frame, limite por sistema e nível de prioridade).
 
 > Dica: para testar rapidamente, edite `tom-lang/teste.tom` e rode `node tom-lang/tomc.js tom-lang/teste.tom`.
+
+## Guia prático
+
+- Subsídios para criar RPG de texto com imagens, telas, nomes, valores e cálculos em Tom: `RPG_TOM_GUIA.md`.
