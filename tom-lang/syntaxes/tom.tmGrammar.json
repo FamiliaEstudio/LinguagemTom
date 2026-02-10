@@ -18,7 +18,7 @@
         },
         {
             "comment": "2. Comandos (Somar, GpuDisp...) - SEM \\b no final para aceitar colado",
-            "match": "\\b(Somar|Subtr|Multi|Divid|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefZn|DefKernel|FimDef|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuRec|SEProv|SEImpr)",
+            "match": "\\b(Somarl|Somar|Subtr|Multi|Divid|GerarTxt|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefZn|DefKernel|FimDef|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuRec|SEProv|SEImpr)",
             "name": "keyword.control.tom"
         },
         {
@@ -64,7 +64,7 @@
         },
         {
             "comment": "7. Tipos Especiais (Vec4, Heap, etc)",
-            "match": "\\b(Vec4|Vec8|Esc|Hp|Stk|Zn|FB64C|FB64U|FB64|I8|UT)\\b",
+            "match": "\\b(Vec4|Vec8|Esc|Hp|Stk|Zn|FB\\d+C|FB\\d+U|FB\\d+|I8|UT)\\b",
             "name": "storage.type.tom"
         }
     ]
