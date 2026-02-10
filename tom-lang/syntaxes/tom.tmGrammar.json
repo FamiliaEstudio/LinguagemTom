@@ -2,38 +2,57 @@
     "scopeName": "source.tom",
     "patterns": [
         {
-            "comment": "CMD: Comandos Fixos - Agora aceitam estar colados em x, y, l",
-            "match": "\\b(Somar|Subtr|Multi|Divid|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefZn|DefKernel|FimDef|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuRec|SEProv|SEImpr)(?=[xylA-Z])?",
-            "name": "keyword.control.tom"
-        },
-        {
-            "comment": "OPC: Opções - Removido o limite de palavra para funcionar no meio da frase (ex: InSd32)",
-            "match": "(?<![a-z])(In|Fl|Sd|Ud|32|64|128|Vec4|Vec8|Esc|Hp|Stk|Zn|FB64C|FB64U|FB64|I8|UT)(?=[A-Z0-9xy]|$)",
-            "name": "storage.type.tom"
-        },
-        {
-            "comment": "INP: Strings (Iniciadas por l')",
+            "comment": "1. Strings completas (l'Texto')",
             "match": "l'[^']*'",
             "name": "string.quoted.single.tom"
         },
         {
-            "comment": "INP: Números Hexadecimais",
-            "match": "\\b0x[0-9A-Fa-f]+\\b|@[0-9A-Fa-fXx]+",
+            "comment": "2. Hexadecimais",
+            "match": "(@|0x)[0-9A-Fa-f]+",
             "name": "constant.numeric.hex.tom"
         },
         {
-            "comment": "INP: Números Decimais",
-            "match": "\\b\\d+\\b",
-            "name": "constant.numeric.tom"
+            "comment": "3. Comandos no início",
+            "match": "^(Somar|Subtr|Multi|Divid|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefZn|DefKernel|FimDef|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuRec|SEProv|SEImpr)",
+            "name": "keyword.control.tom"
         },
         {
-            "comment": "Separadores (x, y, z, l) - Usados como pontuação",
-            "match": "(x|y|z|l)",
+            "comment": "4. Padrão COMPLETO: separador + número (x1000, y500, z20)",
+            "match": "([xyz])(\\d+)",
+            "captures": {
+                "1": {
+                    "name": "punctuation.separator.tom"
+                },
+                "2": {
+                    "name": "constant.numeric.tom"
+                }
+            }
+        },
+        {
+            "comment": "5. Padrão COMPLETO: tipo + número (Fl64, In32, Sd128)",
+            "match": "\\b(In|Fl|Sd|Ud)(32|64|128)",
+            "captures": {
+                "1": {
+                    "name": "storage.type.tom"
+                },
+                "2": {
+                    "name": "storage.type.tom"
+                }
+            }
+        },
+        {
+            "comment": "6. Separadores sozinhos (x, y, z quando NÃO seguidos de dígito)",
+            "match": "[xyz](?!\\d)",
             "name": "punctuation.separator.tom"
         },
         {
-            "comment": "INP: Variáveis genéricas (tudo que sobrou que começa com letra)",
-            "match": "\\b[a-zA-Z][a-zA-Z0-9_]*\\b",
+            "comment": "7. Outros tipos",
+            "match": "\\b(Vec4|Vec8|Esc|Hp|Stk|Zn|FB64C|FB64U|FB64|I8|UT)\\b",
+            "name": "storage.type.tom"
+        },
+        {
+            "comment": "8. Variáveis",
+            "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
             "name": "variable.parameter.tom"
         }
     ]
