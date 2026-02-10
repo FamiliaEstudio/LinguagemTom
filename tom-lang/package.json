@@ -1,0 +1,33 @@
+{
+    "name": "tom-lang",
+    "displayName": "Linguagem Tom",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.70.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [
+            {
+                "id": "tom",
+                "aliases": [
+                    "Tom",
+                    "tom"
+                ],
+                "extensions": [
+                    ".tom"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "tom",
+                "scopeName": "source.tom",
+                "path": "./syntaxes/tom.tmGrammar.json"
+            }
+        ]
+    }
+}

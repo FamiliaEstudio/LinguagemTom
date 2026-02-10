@@ -1,0 +1,30 @@
+{
+    "scopeName": "source.tom",
+    "patterns": [
+        {
+            "comment": "Comandos Principais (Azul)",
+            "match": "\\b(Somar|Divid|ZonaDef|ZonaMatar|GpuDisp|GpuRec)\\b",
+            "name": "keyword.control.tom"
+        },
+        {
+            "comment": "Tipos e Modos (Roxo)",
+            "match": "(Vec4|In|Sd|Ud|Fl|32|64|FB64C|FB64|UT|I8)",
+            "name": "storage.type.tom"
+        },
+        {
+            "comment": "Separadores (Cinza)",
+            "match": "(?<=.)(x|y|z|l)(?=.)",
+            "name": "comment.block.tom"
+        },
+        {
+            "comment": "Números (Verde)",
+            "match": "\\b\\d+\\b",
+            "name": "constant.numeric.tom"
+        },
+        {
+            "comment": "Referências/Inputs (Laranja)",
+            "match": "(?<=x|y|z)[A-Z][a-zA-Z0-9_]+",
+            "name": "variable.parameter.tom"
+        }
+    ]
+}
