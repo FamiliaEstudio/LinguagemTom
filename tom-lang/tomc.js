@@ -18,6 +18,7 @@ let hasSqrtf = false;
 let hasSqrt = false;
 let hasExit = false;
 let hasScanf = false;
+let hasTomGpuPresent = false;
 let lastNumericValue = null;
 let lastTextPointer = null;
 let lastTextLength = 0;
@@ -64,6 +65,7 @@ const OP_COSTS = {
   DividVec4: 120,
   GpuEnv: 400,
   GpuRec: 400,
+  GpuApresentar: 500,
 };
 
 function nextReg() {
@@ -779,8 +781,49 @@ function emitGpuOperation(line) {
     }
 
     const scalarType = `${typePrefix}${bits}`;
-    gpuState.buffers.set(name, { scalarType, count });
+    const bufferConfig = { scalarType, count, llvmPtr: null };
+    if (scalarType === 'In32') {
+      const allocaReg = nextReg();
+      emitInstruction(`${allocaReg} = alloca [${count} x i32]`);
+      const ptrReg = nextReg();
+      emitInstruction(`${ptrReg} = getelementptr inbounds [${count} x i32], [${count} x i32]* ${allocaReg}, i64 0, i64 0`);
+      bufferConfig.llvmPtr = ptrReg;
+    }
+
+    gpuState.buffers.set(name, bufferConfig);
     emitInstruction(`; TOM_GPU_BUFFER_CREATE name=${name} type=${scalarType} count=${count}`);
+    return true;
+  }
+
+  const present = line.match(/^GpuApresentarx([A-Za-z_][A-Za-z0-9_]*)x([^\s]+)x([^\s]+)$/);
+  if (present) {
+    const [, bufferName, widthRaw, heightRaw] = present;
+    const source = gpuState.buffers.get(bufferName);
+    if (!source) {
+      createError(`GpuApresentar falhou: buffer '${bufferName}' não foi criado.`);
+      return true;
+    }
+
+    if (source.scalarType !== 'In32') {
+      createError(`GpuApresentar exige buffer In32. '${bufferName}' está como ${source.scalarType}.`);
+      return true;
+    }
+
+    if (!source.llvmPtr) {
+      createError(`GpuApresentar falhou: ponteiro LLVM do buffer '${bufferName}' indisponível.`);
+      return true;
+    }
+
+    const width = resolveNumericOperand(widthRaw, 'i32', false);
+    const height = resolveNumericOperand(heightRaw, 'i32', false);
+    if (width.error || height.error) {
+      createError(width.error || height.error);
+      return true;
+    }
+
+    hasTomGpuPresent = true;
+    emitInstruction(`call void @TomGpu_Present(i32* ${source.llvmPtr}, i32 ${width.value}, i32 ${height.value})`);
+    trackSystemCost(OP_COSTS.GpuApresentar);
     return true;
   }
 
@@ -908,6 +951,52 @@ function emitGpuOperation(line) {
     return true;
   }
 
+  const kernelLoadScalar = line.match(/^GpuLerIn32x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelLoadScalar) {
+    const [, bufferName, indexVar, outVar] = kernelLoadScalar;
+    const buffer = gpuState.buffers.get(bufferName);
+    if (!buffer) {
+      createError(`GpuLerIn32 falhou: buffer '${bufferName}' não foi criado.`);
+      return true;
+    }
+    if (buffer.scalarType !== 'In32') {
+      createError(`GpuLerIn32 exige buffer In32. '${bufferName}' está como ${buffer.scalarType}.`);
+      return true;
+    }
+
+    gpuState.currentKernel.ops.push({ kind: 'load_scalar', scalarType: 'In32', bufferName, indexVar, outVar });
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=load_scalar type=In32 buffer=${bufferName} index=${indexVar} out=${outVar}`);
+    return true;
+  }
+
+  const kernelStoreScalar = line.match(/^GpuEscrIn32x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelStoreScalar) {
+    const [, bufferName, indexVar, inVar] = kernelStoreScalar;
+    const buffer = gpuState.buffers.get(bufferName);
+    if (!buffer) {
+      createError(`GpuEscrIn32 falhou: buffer '${bufferName}' não foi criado.`);
+      return true;
+    }
+    if (buffer.scalarType !== 'In32') {
+      createError(`GpuEscrIn32 exige buffer In32. '${bufferName}' está como ${buffer.scalarType}.`);
+      return true;
+    }
+
+    gpuState.currentKernel.ops.push({ kind: 'store_scalar', scalarType: 'In32', bufferName, indexVar, inVar });
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=store_scalar type=In32 buffer=${bufferName} index=${indexVar} in=${inVar}`);
+    return true;
+  }
+
+  const kernelMathScalar = line.match(/^(Somar|Subtr|Multi|Divid)In32x(@?[A-Za-z_][A-Za-z0-9_]*)y(@?[A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelMathScalar) {
+    const [, op, leftRaw, rightRaw, outVar] = kernelMathScalar;
+    const leftVar = leftRaw.startsWith('@') ? leftRaw.slice(1) : leftRaw;
+    const rightVar = rightRaw.startsWith('@') ? rightRaw.slice(1) : rightRaw;
+    gpuState.currentKernel.ops.push({ kind: 'math_scalar', op, scalarType: 'In32', leftVar, rightVar, outVar });
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=${op.toLowerCase()}_scalar type=In32 left=${leftVar} right=${rightVar} out=${outVar}`);
+    return true;
+  }
+
   const kernelMath = line.match(/^(Somar|Subtr|Multi|Divid)Vec4(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
   if (kernelMath) {
     const [, op, typePrefix, bits, leftVar, rightVar, outVar] = kernelMath;
@@ -974,6 +1063,9 @@ if (hasSqrt) {
 }
 if (hasExit) {
   output.push('declare void @exit(i32)');
+}
+if (hasTomGpuPresent) {
+  output.push('declare void @TomGpu_Present(i32*, i32, i32)');
 }
 if (budgetState.runtimeInstrumentation || budgetState.systems.length > 0) {
   output.push('declare i64 @llvm.readcyclecounter()');
