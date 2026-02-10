@@ -27,6 +27,15 @@ const budgetState = {
   systems: [],
   priorities: [],
 };
+const gpuState = {
+  buffers: new Map(),
+  hostUploads: [],
+  hostDownloads: [],
+  kernels: new Map(),
+  kernelOrder: [],
+  dispatches: [],
+  currentKernel: null,
+};
 
 function nextReg() {
   regCount += 1;
@@ -364,7 +373,164 @@ function emitText(line) {
   return true;
 }
 
+function emitGpuOperation(line) {
+  const createBuffer = line.match(/^GpuBufCriar(Fl|In)(32|64)x(\d+)y([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (createBuffer) {
+    const [, typePrefix, bits, countRaw, name] = createBuffer;
+    const count = Number.parseInt(countRaw, 10);
+    if (!Number.isInteger(count) || count <= 0) {
+      createError(`GpuBufCriar inválido: quantidade '${countRaw}' em ${line}`);
+      return true;
+    }
+
+    if (gpuState.buffers.has(name)) {
+      createError(`GpuBufCriar duplicado para buffer '${name}'.`);
+      return true;
+    }
+
+    const scalarType = `${typePrefix}${bits}`;
+    gpuState.buffers.set(name, { scalarType, count });
+    irLines.push(`  ; TOM_GPU_BUFFER_CREATE name=${name} type=${scalarType} count=${count}`);
+    return true;
+  }
+
+  const upload = line.match(/^GpuEnv(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)[xX]([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (upload) {
+    const [, typePrefix, bits, hostVar, gpuBuffer] = upload;
+    const scalarType = `${typePrefix}${bits}`;
+    const target = gpuState.buffers.get(gpuBuffer);
+    if (!target) {
+      createError(`GpuEnv falhou: buffer '${gpuBuffer}' não foi criado.`);
+      return true;
+    }
+    if (target.scalarType !== scalarType) {
+      createError(`GpuEnv incompatível: ${scalarType} para '${gpuBuffer}' (${target.scalarType}).`);
+      return true;
+    }
+
+    gpuState.hostUploads.push({ scalarType, hostVar, gpuBuffer });
+    irLines.push(`  ; TOM_GPU_UPLOAD type=${scalarType} host=${hostVar} device=${gpuBuffer}`);
+    return true;
+  }
+
+  const download = line.match(/^GpuRec(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (download) {
+    const [, typePrefix, bits, gpuBuffer, hostVar] = download;
+    const scalarType = `${typePrefix}${bits}`;
+    const source = gpuState.buffers.get(gpuBuffer);
+    if (!source) {
+      createError(`GpuRec falhou: buffer '${gpuBuffer}' não foi criado.`);
+      return true;
+    }
+    if (source.scalarType !== scalarType) {
+      createError(`GpuRec incompatível: ${scalarType} para '${gpuBuffer}' (${source.scalarType}).`);
+      return true;
+    }
+
+    gpuState.hostDownloads.push({ scalarType, gpuBuffer, hostVar });
+    irLines.push(`  ; TOM_GPU_DOWNLOAD type=${scalarType} device=${gpuBuffer} host=${hostVar}`);
+    return true;
+  }
+
+  const kernelStart = line.match(/^DefKernelx([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelStart) {
+    const [, kernelName] = kernelStart;
+    if (gpuState.currentKernel) {
+      createError(`DefKernel aninhado não suportado: '${kernelName}' dentro de '${gpuState.currentKernel.name}'.`);
+      return true;
+    }
+
+    const kernel = { name: kernelName, ops: [] };
+    gpuState.currentKernel = kernel;
+    gpuState.kernels.set(kernelName, kernel);
+    gpuState.kernelOrder.push(kernelName);
+    irLines.push(`  ; TOM_GPU_KERNEL_BEGIN name=${kernelName}`);
+    return true;
+  }
+
+  if (line === 'FimDef') {
+    if (!gpuState.currentKernel) {
+      createError('FimDef encontrado sem DefKernel ativo.');
+      return true;
+    }
+
+    irLines.push(`  ; TOM_GPU_KERNEL_END name=${gpuState.currentKernel.name}`);
+    gpuState.currentKernel = null;
+    return true;
+  }
+
+  const dispatch = line.match(/^GpuDispx([A-Za-z_][A-Za-z0-9_]*)x(\d+)y(\d+)z(\d+)$/);
+  if (dispatch) {
+    const [, kernelName, xRaw, yRaw, zRaw] = dispatch;
+    const dims = [xRaw, yRaw, zRaw].map((value) => Number.parseInt(value, 10));
+    if (dims.some((value) => !Number.isInteger(value) || value <= 0)) {
+      createError(`GpuDisp inválido: dimensões devem ser inteiros positivos (${line}).`);
+      return true;
+    }
+
+    if (!gpuState.kernels.has(kernelName)) {
+      createError(`GpuDisp falhou: kernel '${kernelName}' não foi definido.`);
+      return true;
+    }
+
+    gpuState.dispatches.push({ kernelName, x: dims[0], y: dims[1], z: dims[2] });
+    irLines.push(`  ; TOM_GPU_DISPATCH kernel=${kernelName} x=${dims[0]} y=${dims[1]} z=${dims[2]}`);
+    return true;
+  }
+
+  if (!gpuState.currentKernel) return false;
+
+  const kernelId = line.match(/^GpuIdObtIn32x([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelId) {
+    const [, idVar] = kernelId;
+    gpuState.currentKernel.ops.push({ kind: 'id', idVar });
+    irLines.push(`  ; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=id var=${idVar}`);
+    return true;
+  }
+
+  const kernelLoad = line.match(/^GpuLerVec4(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelLoad) {
+    const [, typePrefix, bits, bufferName, indexVar, outVar] = kernelLoad;
+    if (!gpuState.buffers.has(bufferName)) {
+      createError(`GpuLer falhou: buffer '${bufferName}' não foi criado.`);
+      return true;
+    }
+
+    const scalarType = `${typePrefix}${bits}`;
+    gpuState.currentKernel.ops.push({ kind: 'load_vec4', scalarType, bufferName, indexVar, outVar });
+    irLines.push(`  ; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=load_vec4 type=${scalarType} buffer=${bufferName} index=${indexVar} out=${outVar}`);
+    return true;
+  }
+
+  const kernelStore = line.match(/^GpuEscrVec4(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelStore) {
+    const [, typePrefix, bits, bufferName, indexVar, inVar] = kernelStore;
+    if (!gpuState.buffers.has(bufferName)) {
+      createError(`GpuEscr falhou: buffer '${bufferName}' não foi criado.`);
+      return true;
+    }
+
+    const scalarType = `${typePrefix}${bits}`;
+    gpuState.currentKernel.ops.push({ kind: 'store_vec4', scalarType, bufferName, indexVar, inVar });
+    irLines.push(`  ; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=store_vec4 type=${scalarType} buffer=${bufferName} index=${indexVar} in=${inVar}`);
+    return true;
+  }
+
+  const kernelMath = line.match(/^(Somar|Subtr|Multi|Divid)Vec4(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelMath) {
+    const [, op, typePrefix, bits, leftVar, rightVar, outVar] = kernelMath;
+    const scalarType = `${typePrefix}${bits}`;
+    gpuState.currentKernel.ops.push({ kind: 'math_vec4', op, scalarType, leftVar, rightVar, outVar });
+    irLines.push(`  ; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=${op.toLowerCase()}_vec4 type=${scalarType} left=${leftVar} right=${rightVar} out=${outVar}`);
+    return true;
+  }
+
+  createError(`Comando de kernel não reconhecido: ${line}`);
+  return true;
+}
+
 for (const line of lines) {
+  if (emitGpuOperation(line)) continue;
   if (emitBudgetDirective(line)) continue;
   if (emitNumericOperation(line)) continue;
   if (emitVectorOperation(line)) continue;
@@ -372,6 +538,10 @@ for (const line of lines) {
   if (emitText(line)) continue;
 
   createError(`Comando não reconhecido: ${line}`);
+}
+
+if (!firstError && gpuState.currentKernel) {
+  createError(`Kernel '${gpuState.currentKernel.name}' não foi finalizado com FimDef.`);
 }
 
 if (firstError) {
@@ -429,6 +599,36 @@ if (budgetState.frameTargetFps || budgetState.systems.length || budgetState.prio
   if (budgetState.priorities.length) {
     for (const item of budgetState.priorities) {
       console.log(`- Prioridade ${item.name}: ${item.level}`);
+    }
+  }
+}
+
+if (gpuState.buffers.size || gpuState.kernelOrder.length || gpuState.dispatches.length) {
+  console.log('\nTomGPU (base inicial):');
+  if (gpuState.buffers.size) {
+    for (const [name, cfg] of gpuState.buffers.entries()) {
+      console.log(`- Buffer ${name}: ${cfg.scalarType} x ${cfg.count}`);
+    }
+  }
+  if (gpuState.hostUploads.length) {
+    for (const upload of gpuState.hostUploads) {
+      console.log(`- Upload ${upload.hostVar} -> ${upload.gpuBuffer} (${upload.scalarType})`);
+    }
+  }
+  if (gpuState.kernelOrder.length) {
+    for (const kernelName of gpuState.kernelOrder) {
+      const kernel = gpuState.kernels.get(kernelName);
+      console.log(`- Kernel ${kernelName}: ${kernel.ops.length} operações`);
+    }
+  }
+  if (gpuState.dispatches.length) {
+    for (const dispatch of gpuState.dispatches) {
+      console.log(`- Dispatch ${dispatch.kernelName}: (${dispatch.x}, ${dispatch.y}, ${dispatch.z})`);
+    }
+  }
+  if (gpuState.hostDownloads.length) {
+    for (const download of gpuState.hostDownloads) {
+      console.log(`- Download ${download.gpuBuffer} -> ${download.hostVar} (${download.scalarType})`);
     }
   }
 }

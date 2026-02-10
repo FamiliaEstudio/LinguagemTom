@@ -15,3 +15,17 @@ SomarlFB32CxstrMsgyl'Joined\n'
 GerarTxtxstrMsg
 GerarTxtUltimo
 GerarTxtxl'Compilador Tom -> LLVM IR ativo!\n'
+
+GpuBufCriarFl32x4000000yBufPos
+GpuBufCriarFl32x4000000yBufVel
+GpuEnvFl32xRamPosxBufPos
+GpuEnvFl32xRamVelxBufVel
+DefKernelxAtualizaParticula
+GpuIdObtIn32xMeuId
+GpuLerVec4Fl32xBufPosyMeuIdzPosAtual
+GpuLerVec4Fl32xBufVelyMeuIdzVelAtual
+SomarVec4Fl32xPosAtualyVelAtualzNovaPos
+GpuEscrVec4Fl32xBufPosyMeuIdzNovaPos
+FimDef
+GpuDispxAtualizaParticulax1000000y1z1
+GpuRecFl32xBufPosyRamPos
