@@ -1,0 +1,34 @@
+DefVarInSd32xpl_hp_maxy40
+DefVarInSd32xpl_hp_atualy34
+DefVarInSd32xpl_mp_atualy10
+DefVarInSd32xpl_ataquey12
+DefVarInSd32xpl_defesay4
+DefVarInSd32xpl_nively1
+DefVarInSd32xpl_xpy0
+
+DefVarInSd32xen_hp_atualy18
+DefVarInSd32xen_defesay3
+DefVarInSd32xdano_basey0
+DefVarInSd32xacao_escolhiday0
+
+DefTxtxcn_nomeyl'CAVERNA SOMBRIA\n'
+DefTxtxcn_imagem_refyl'[IMG: caverna_entrada.png]\n'
+DefTxtxcn_narrativayl'Um cheiro de enxofre invade o ar...\nUm goblin surge das sombras!\n'
+
+GerarTxtxcn_nome
+GerarTxtxcn_imagem_ref
+GerarTxtxcn_narrativa
+GerarTxtxl'1) Atacar  2) Defender  3) Item  4) Fugir\n> '
+LerEntradaInSd32xacao_escolhida
+
+EscopoInixTurnoCombate
+SeMaiorxyInSd32x@acao_escolhiday0
+SubtrxyInSd32x@pl_ataquey@en_defesa
+SetVarInSd32xdano_basey@ULTIMO
+SeMaiorxyInSd32x1y@dano_base
+SetVarInSd32xdano_basey1
+EscopoFimxTurnoCombate
+
+SubtrxyInSd32x@en_hp_atualy@dano_base
+SetVarInSd32xen_hp_atualy@ULTIMO
+GerarTxtxl'Voce atacou o goblin!\n'

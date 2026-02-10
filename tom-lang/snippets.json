@@ -13,6 +13,41 @@
         ],
         "description": "Soma de ponto flutuante."
     },
+    "Definir Variavel Inteira": {
+        "prefix": "DefVarIn",
+        "body": [
+            "DefVarIn${1|Sd,Ud|}${2|32,64|}x${3:nome}y${4:0}"
+        ],
+        "description": "Declara variável numérica persistente para estado de jogo."
+    },
+    "Definir Variavel Float": {
+        "prefix": "DefVarFl",
+        "body": [
+            "DefVarFl${1|32,64|}x${2:nome}y${3:0.0}"
+        ],
+        "description": "Declara variável de ponto flutuante persistente para estado de jogo."
+    },
+    "Atualizar Variavel": {
+        "prefix": "SetVar",
+        "body": [
+            "SetVarIn${1|Sd,Ud|}${2|32,64|}x${3:nome}y${4:@origem_ou_literal}"
+        ],
+        "description": "Atualiza variável já declarada."
+    },
+    "Entrada Numérica": {
+        "prefix": "LerEntrada",
+        "body": [
+            "LerEntradaIn${1|Sd,Ud|}${2|32,64|}x${3:nome}"
+        ],
+        "description": "Lê entrada numérica do jogador para uma variável."
+    },
+    "Texto Nomeado": {
+        "prefix": "DefTxt",
+        "body": [
+            "DefTxtx${1:nome}yl'${2:texto}'"
+        ],
+        "description": "Declara texto por nome para cenas e narrativa."
+    },
     "Alocacao Heap": {
         "prefix": "Aloc",
         "body": [
