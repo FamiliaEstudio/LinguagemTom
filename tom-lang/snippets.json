@@ -75,5 +75,19 @@
             "DefStkFB64Cx${1:strNome}yl'${2:Texto}'"
         ],
         "description": "Define string segura na stack (Fixed Buffer)."
+    },
+    "GPU Apresentar Buffer": {
+        "prefix": "GpuApresentar",
+        "body": [
+            "GpuApresentarx${1:BufTela}x${2:largura}x${3:altura}"
+        ],
+        "description": "Apresenta um buffer In32 (ARGB) em janela via runtime TomGPU."
+    },
+    "Kernel Math Escalar In32": {
+        "prefix": "KernelMathIn32",
+        "body": [
+            "${1|Somar,Subtr,Multi,Divid|}In32x${2:esquerda}y${3:direita}z${4:saida}"
+        ],
+        "description": "Operação escalar In32 para kernels TomGPU (útil para blitting/indexação)."
     }
 }

@@ -1012,3 +1012,10 @@ Para viabilizar o fluxo do `RPG_TOM_GUIA.md`, o compilador Tom agora aceita coma
 - `GerarTxtxcn_narrativa` (renderiza texto nomeado)
 
 Com isso, a Tom fica apta para o vertical slice de RPG (estado de jogador/inimigo, parsing básico de comando, loop/ramificação e mapeamento `id_cena -> imagem_ref` textual).
+
+## TomGPU Compute Rasterization (pipeline mínimo)
+
+- Novo intrínseco do compilador: `GpuApresentarxNomeDoBufferxLarguraxAltura`.
+- Esse comando gera chamada LLVM externa: `@TomGpu_Present(i32* buffer_ptr, i32 width, i32 height)`.
+- Runtime host SDL2 disponível em `tom-lang/runtime/tom_gpu_host.cpp` para abrir janela e apresentar o buffer de pixels.
+- Exemplo de blitting em Tom puro: `tom-lang/exemplos/gpu_blit.tom` (inclui indexação `Y * Width + X` com `Multi` + `Somar`).
