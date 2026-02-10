@@ -4,11 +4,19 @@ DefBudgetSistemaxFisicayMaxMsy3.0
 DefPrioridadexJogadory10
 DefPrioridadexParticulasy3
 
+EscopoInixFisica
 SomarxyInSd32x1000y500
 SubtrxyInUd64x1000y2
 MultixyFl32x3.5y2.0
 DividxyFl64x22.0y7.0
 SomarVec4In32x[10,20,30,40]y[1,2,3,4]
+EscopoFimxFisica
+
+EscopoInixDegradacao
+SeMaiorxyInSd32x@TomPerf_StressLevely50
+GerarTxtxl'Fisica simplificada (stress alto)\n'
+EscopoFimxDegradacao
+
 SomarlI8xyxl'Meriadok 'yl'Aiko\n'
 DefStkFB32CxstrMsgyl'Player1 '
 SomarlFB32CxstrMsgyl'Joined\n'

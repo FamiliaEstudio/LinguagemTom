@@ -4,6 +4,23 @@ const frameRegex = /^DefBudgetFramexyTargetFPSy(\d+)$/;
 const systemRegex = /^DefBudgetSistemax([A-Za-z_][A-Za-z0-9_]*)yMaxMsy(-?\d+(?:\.\d+)?)$/;
 const priorityRegex = /^DefPrioridadex([A-Za-z_][A-Za-z0-9_]*)y(-?\d+)$/;
 
+const scopeStartRegex = /^EscopoInix([A-Za-z_][A-Za-z0-9_]*)$/;
+const scopeEndRegex = /^EscopoFimx([A-Za-z_][A-Za-z0-9_]*)$/;
+const numericOpRegex = /^(Somar|Subtr|Multi|Divid)xy(In|Fl)(Sd|Ud)?(32|64)x/;
+const vectorOpRegex = /^(Somar|Subtr|Multi|Divid)Vec4(In|Fl)(32|64)x/;
+const TOMCYCLES_PER_MS = 1000;
+const OP_COSTS = {
+  Somar: 1,
+  Subtr: 1,
+  Multi: 3,
+  Divid: 60,
+  SomarVec4: 6,
+  SubtrVec4: 6,
+  MultiVec4: 10,
+  DividVec4: 120,
+};
+
+
 function activate(context) {
   const diagnostics = vscode.languages.createDiagnosticCollection('tom-live-budget');
   const budgetDecoration = vscode.window.createTextEditorDecorationType({
@@ -18,6 +35,9 @@ function activate(context) {
     const docDiagnostics = [];
     const decorationRanges = [];
     const systemNames = new Set();
+    const systemLimits = new Map();
+    const scopeStack = [];
+    const scopeCosts = new Map();
 
     for (let index = 0; index < document.lineCount; index += 1) {
       const line = document.lineAt(index);
@@ -64,6 +84,7 @@ function activate(context) {
         }
 
         systemNames.add(name);
+        systemLimits.set(name, Math.round(maxMs * TOMCYCLES_PER_MS));
         hover = `🧩 Tom Live Budget: sistema ${name} com limite de ${maxMs} ms/frame`;
       }
 
@@ -90,6 +111,53 @@ function activate(context) {
         }
 
         hover = `📌 Tom Live Budget: prioridade ${name} = ${level}`;
+      }
+
+
+      const scopeStart = text.match(scopeStartRegex);
+      if (scopeStart) {
+        scopeStack.push(scopeStart[1]);
+      }
+
+      const numeric = text.match(numericOpRegex);
+      if (numeric && scopeStack.length > 0) {
+        const op = numeric[1];
+        const activeScope = scopeStack[scopeStack.length - 1];
+        const currentCost = scopeCosts.get(activeScope) || 0;
+        scopeCosts.set(activeScope, currentCost + (OP_COSTS[op] || 1));
+      }
+
+      const vector = text.match(vectorOpRegex);
+      if (vector && scopeStack.length > 0) {
+        const op = `${vector[1]}Vec4`;
+        const activeScope = scopeStack[scopeStack.length - 1];
+        const currentCost = scopeCosts.get(activeScope) || 0;
+        scopeCosts.set(activeScope, currentCost + (OP_COSTS[op] || 6));
+      }
+
+      const scopeEnd = text.match(scopeEndRegex);
+      if (scopeEnd) {
+        const scopeName = scopeEnd[1];
+        const activeScope = scopeStack.pop();
+        if (activeScope !== scopeName) {
+          docDiagnostics.push(new vscode.Diagnostic(
+            line.range,
+            `Tom Live Budget: EscopoFimx${scopeName} não corresponde ao escopo ativo (${activeScope || 'nenhum'}).`,
+            vscode.DiagnosticSeverity.Warning,
+          ));
+        }
+
+        const limit = systemLimits.get(scopeName);
+        if (limit) {
+          const estimated = scopeCosts.get(scopeName) || 0;
+          if (estimated > limit) {
+            docDiagnostics.push(new vscode.Diagnostic(
+              line.range,
+              `Tom Live Budget WCET: escopo ${scopeName} estimado em ${estimated} TomCycles (limite ${limit}).`,
+              vscode.DiagnosticSeverity.Warning,
+            ));
+          }
+        }
       }
 
       if (hover) {
