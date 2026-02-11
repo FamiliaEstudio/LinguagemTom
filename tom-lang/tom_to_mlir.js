@@ -53,11 +53,152 @@ function traduzirTipo(tomType) {
   return rawType || 'none';
 }
 
-function renderTomIrNode(node, printer) {
+function inferTypeFromValue(value, fallback = 'i32') {
+  if (value && typeof value === 'object' && value.type) {
+    return traduzirTipo(value.type);
+  }
+
+  if (typeof value === 'number') {
+    return Number.isInteger(value) ? 'i32' : 'f32';
+  }
+
+  if (typeof value === 'string' && value.includes('.')) {
+    return 'f32';
+  }
+
+  return traduzirTipo(fallback);
+}
+
+class FunctionLoweringContext {
+  constructor({ fnNode, printer }) {
+    this.fnNode = fnNode;
+    this.printer = printer;
+    this.nextValueId = 0;
+    this.nextStackId = 0;
+    this.symbolTable = new Map();
+  }
+
+  freshValue(prefix = 'v') {
+    const reg = `%${prefix}${this.nextValueId}`;
+    this.nextValueId += 1;
+    return reg;
+  }
+
+  freshStack(prefix = 'slot') {
+    const reg = `%${prefix}${this.nextStackId}`;
+    this.nextStackId += 1;
+    return reg;
+  }
+
+  normalizeName(name) {
+    return String(name || '').replace(/^%/, '');
+  }
+
+  ensureLocal(name, type) {
+    const key = this.normalizeName(name);
+    if (this.symbolTable.has(key)) {
+      return this.symbolTable.get(key);
+    }
+
+    const stackReg = this.freshStack(key || 'slot');
+    this.printer.line(`${stackReg} = memref.alloca() : memref<1x${type}>`);
+    const entry = { kind: 'stack', stackReg, type };
+    this.symbolTable.set(key, entry);
+    return entry;
+  }
+
+  bindArgument(arg) {
+    const argName = this.normalizeName(arg.name);
+    const type = traduzirTipo(arg.type);
+    const stackReg = this.freshStack(`${argName}_slot`);
+    this.printer.line(`${stackReg} = memref.alloca() : memref<1x${type}>`);
+    this.printer.line(`memref.store %${argName}, ${stackReg}[0] : memref<1x${type}>`);
+    this.symbolTable.set(argName, { kind: 'stack', stackReg, type });
+  }
+
+  loadSymbol(name) {
+    const key = this.normalizeName(name);
+    const entry = this.symbolTable.get(key);
+    if (!entry) {
+      return null;
+    }
+
+    const loaded = this.freshValue(key || 'load');
+    this.printer.line(`${loaded} = memref.load ${entry.stackReg}[0] : memref<1x${entry.type}>`);
+    return { reg: loaded, type: entry.type };
+  }
+
+  storeSymbol(name, sourceReg, type) {
+    const entry = this.ensureLocal(name, type);
+    this.printer.line(`memref.store ${sourceReg}, ${entry.stackReg}[0] : memref<1x${entry.type}>`);
+  }
+
+  emitBinaryOp(op, lhs, rhs, type) {
+    const arithmeticType = type || lhs.type || rhs.type || 'i32';
+    const opMap = {
+      '+': { i32: 'arith.addi', f32: 'arith.addf' },
+      '-': { i32: 'arith.subi', f32: 'arith.subf' },
+      '*': { i32: 'arith.muli', f32: 'arith.mulf' },
+      '/': { i32: 'arith.divsi', f32: 'arith.divf' },
+    };
+
+    const family = opMap[op];
+    if (!family) {
+      this.printer.line(`// operador não suportado: ${op}`);
+      return { reg: lhs.reg, type: arithmeticType };
+    }
+
+    const mlirOp = family[arithmeticType] || family.i32;
+    const result = this.freshValue('tmp');
+    this.printer.line(`${result} = ${mlirOp} ${lhs.reg}, ${rhs.reg} : ${arithmeticType}`);
+    return { reg: result, type: arithmeticType };
+  }
+
+  emitValue(value, expectedType = null) {
+    if (value && typeof value === 'object' && value.kind === 'TomIR.BinaryOp') {
+      const lhs = this.emitValue(value.left, expectedType || value.type);
+      const rhs = this.emitValue(value.right, expectedType || value.type);
+      const type = traduzirTipo(value.type || lhs.type || rhs.type || expectedType || 'i32');
+      return this.emitBinaryOp(value.op, lhs, rhs, type);
+    }
+
+    if (typeof value === 'number') {
+      const type = inferTypeFromValue(value, expectedType || 'i32');
+      const cst = this.freshValue('cst');
+      this.printer.line(`${cst} = arith.constant ${value} : ${type}`);
+      return { reg: cst, type };
+    }
+
+    if (typeof value === 'string') {
+      const normalized = this.normalizeName(value);
+      const loaded = this.loadSymbol(normalized);
+      if (loaded) {
+        return loaded;
+      }
+
+      if (normalized.match(/^-?\d+(\.\d+)?$/)) {
+        const numeric = Number(normalized);
+        const type = inferTypeFromValue(numeric, expectedType || 'i32');
+        const cst = this.freshValue('cst');
+        this.printer.line(`${cst} = arith.constant ${normalized} : ${type}`);
+        return { reg: cst, type };
+      }
+    }
+
+    const fallbackType = traduzirTipo(expectedType || 'i32');
+    const zero = this.freshValue('cst');
+    this.printer.line(`${zero} = arith.constant 0 : ${fallbackType}`);
+    return { reg: zero, type: fallbackType };
+  }
+}
+
+function renderTomIrNode(node, ctx) {
+  const { printer } = ctx;
+
   if (node.kind === 'TomIR.AffineFor') {
     printer.block(`affine.for ${node.iv} = ${node.lowerBound} to ${node.upperBound} step ${node.step}`, () => {
       for (const child of node.body) {
-        renderTomIrNode(child, printer);
+        renderTomIrNode(child, ctx);
       }
     });
     return;
@@ -69,8 +210,38 @@ function renderTomIrNode(node, printer) {
     const cstReg = '%addcst';
     printer.line(`${cstReg} = arith.constant ${node.amount} : ${node.elementType}`);
     printer.line(`${loadReg} = affine.load ${node.bufferArg}[${node.indexVar}] : memref<?x${node.elementType}>`);
-    printer.line(`${sumReg} = arith.addi ${loadReg}, ${cstReg} : ${node.elementType}`);
+    const addOp = node.elementType === 'f32' ? 'arith.addf' : 'arith.addi';
+    printer.line(`${sumReg} = ${addOp} ${loadReg}, ${cstReg} : ${node.elementType}`);
     printer.line(`affine.store ${sumReg}, ${node.bufferArg}[${node.indexVar}] : memref<?x${node.elementType}>`);
+    return;
+  }
+
+  if (node.kind === 'TomIR.LocalVar') {
+    const type = traduzirTipo(node.type);
+    const entry = ctx.ensureLocal(node.name, type);
+    if (node.initialValue !== null && node.initialValue !== undefined) {
+      const init = ctx.emitValue(node.initialValue, type);
+      printer.line(`memref.store ${init.reg}, ${entry.stackReg}[0] : memref<1x${type}>`);
+    }
+    return;
+  }
+
+  if (node.kind === 'TomIR.Assign') {
+    const type = traduzirTipo(node.type || inferTypeFromValue(node.value));
+    const value = ctx.emitValue(node.value, type);
+    ctx.storeSymbol(node.target, value.reg, type);
+    return;
+  }
+
+  if (node.kind === 'TomIR.Return') {
+    if (node.value === null || node.value === undefined) {
+      printer.line('return');
+      return;
+    }
+
+    const returnType = traduzirTipo(node.type || ctx.fnNode.returnType || 'i32');
+    const returnValue = ctx.emitValue(node.value, returnType);
+    printer.line(`return ${returnValue.reg} : ${returnType}`);
     return;
   }
 
@@ -96,11 +267,28 @@ class TomToMLIR {
       .map((arg) => `${arg.name}: ${traduzirTipo(arg.type)}`)
       .join(', ');
 
-    this.printer.block(`func.func @${fnNode.name}(${args})`, () => {
-      for (const node of fnNode.body || []) {
-        renderTomIrNode(node, this.printer);
+    const returnType = fnNode.returnType ? traduzirTipo(fnNode.returnType) : null;
+    const signature = returnType
+      ? `func.func @${fnNode.name}(${args}) -> ${returnType}`
+      : `func.func @${fnNode.name}(${args})`;
+
+    this.printer.block(signature, () => {
+      const ctx = new FunctionLoweringContext({ fnNode, printer: this.printer });
+      for (const arg of fnNode.args || []) {
+        ctx.bindArgument(arg);
       }
-      this.printer.line('return');
+
+      let hasExplicitReturn = false;
+      for (const node of fnNode.body || []) {
+        renderTomIrNode(node, ctx);
+        if (node.kind === 'TomIR.Return') {
+          hasExplicitReturn = true;
+        }
+      }
+
+      if (!hasExplicitReturn) {
+        this.printer.line('return');
+      }
     });
   }
 }
