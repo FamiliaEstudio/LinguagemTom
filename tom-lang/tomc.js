@@ -244,20 +244,45 @@ function buildGlslKernelSource(kernel, buffersByName) {
   const varTypes = new Map();
   const declaredBuffers = new Set();
   const unsupported = [];
-  const pushConstants = new Set();
+  const pushConstants = new Map();
+  const bufferBindings = [];
+  const localSize = { x: 64, y: 1, z: 1 };
   const intExtRequired = Array.from(buffersByName.values()).some((buffer) => buffer.scalarType === 'In64');
   const float64ExtRequired = Array.from(buffersByName.values()).some((buffer) => buffer.scalarType === 'Fl64');
+  const requiredExtensions = [];
 
-  function markExternalSymbol(symbol) {
+  if (intExtRequired) requiredExtensions.push('GL_EXT_shader_explicit_arithmetic_types_int64');
+  if (float64ExtRequired) requiredExtensions.push('GL_ARB_gpu_shader_fp64');
+
+  function registerPushConstant(symbol, preferredType = 'int') {
     if (!symbol || declaredBuffers.has(symbol) || varTypes.has(symbol)) return;
-    pushConstants.add(symbol);
+    const current = pushConstants.get(symbol);
+    if (!current || current === preferredType) {
+      pushConstants.set(symbol, preferredType);
+      return;
+    }
+    if (current === 'int' && preferredType !== 'int') {
+      pushConstants.set(symbol, preferredType);
+    }
+  }
+
+  function coerceSymbol(symbol, expectedType, fallbackType = 'int') {
+    if (!symbol) return symbol;
+    const knownType = varTypes.get(symbol);
+    if (knownType) {
+      return knownType === expectedType ? symbol : `${expectedType}(${symbol})`;
+    }
+
+    registerPushConstant(symbol, fallbackType);
+    const sourceType = pushConstants.get(symbol) || fallbackType;
+    return sourceType === expectedType ? symbol : `${expectedType}(${symbol})`;
   }
 
   glsl.push('#version 460');
   if (intExtRequired) glsl.push('#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require');
   if (float64ExtRequired) glsl.push('#extension GL_ARB_gpu_shader_fp64 : require');
   glsl.push('');
-  glsl.push('layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;');
+  glsl.push(`layout(local_size_x = ${localSize.x}, local_size_y = ${localSize.y}, local_size_z = ${localSize.z}) in;`);
   glsl.push('');
 
   let bindingIndex = 0;
@@ -269,6 +294,7 @@ function buildGlslKernelSource(kernel, buffersByName) {
     }
     glsl.push(`layout(std430, binding = ${bindingIndex}) buffer TomBuf_${bufferName} { ${glslType} data[]; } ${bufferName};`);
     declaredBuffers.add(bufferName);
+    bufferBindings.push({ name: bufferName, binding: bindingIndex, scalarType: bufferCfg.scalarType, glslType });
     bindingIndex += 1;
   }
 
@@ -292,9 +318,10 @@ function buildGlslKernelSource(kernel, buffersByName) {
         unsupported.push(`load_scalar não suportado: ${op.scalarType} em ${op.bufferName}`);
         continue;
       }
-      markExternalSymbol(op.indexVar);
+      registerPushConstant(op.indexVar, 'uint');
+      const indexExpr = coerceSymbol(op.indexVar, 'uint', 'uint');
       varTypes.set(op.outVar, glslType);
-      glsl.push(`  ${glslType} ${op.outVar} = ${op.bufferName}.data[uint(${op.indexVar})];`);
+      glsl.push(`  ${glslType} ${op.outVar} = ${op.bufferName}.data[${indexExpr}];`);
       continue;
     }
 
@@ -303,9 +330,12 @@ function buildGlslKernelSource(kernel, buffersByName) {
         unsupported.push(`store_scalar sem buffer declarado: ${op.bufferName}`);
         continue;
       }
-      markExternalSymbol(op.indexVar);
-      markExternalSymbol(op.inVar);
-      glsl.push(`  ${op.bufferName}.data[uint(${op.indexVar})] = ${op.inVar};`);
+      const buffer = buffersByName.get(op.bufferName);
+      const targetType = scalarToGlslType(buffer?.scalarType || op.scalarType) || 'int';
+      registerPushConstant(op.indexVar, 'uint');
+      const indexExpr = coerceSymbol(op.indexVar, 'uint', 'uint');
+      const valueExpr = coerceSymbol(op.inVar, targetType, targetType);
+      glsl.push(`  ${op.bufferName}.data[${indexExpr}] = ${valueExpr};`);
       continue;
     }
 
@@ -316,10 +346,10 @@ function buildGlslKernelSource(kernel, buffersByName) {
         unsupported.push(`math_scalar op não suportada: ${op.op}`);
         continue;
       }
-      markExternalSymbol(op.leftVar);
-      markExternalSymbol(op.rightVar);
+      const leftExpr = coerceSymbol(op.leftVar, leftType, leftType);
+      const rightExpr = coerceSymbol(op.rightVar, leftType, leftType);
       varTypes.set(op.outVar, leftType);
-      glsl.push(`  ${leftType} ${op.outVar} = ${op.leftVar} ${operator} ${op.rightVar};`);
+      glsl.push(`  ${leftType} ${op.outVar} = ${leftExpr} ${operator} ${rightExpr};`);
       continue;
     }
 
@@ -329,9 +359,9 @@ function buildGlslKernelSource(kernel, buffersByName) {
         unsupported.push(`sin_scalar não suportado para ${op.scalarType}`);
         continue;
       }
-      markExternalSymbol(op.inVar);
+      const sinInput = coerceSymbol(op.inVar, 'float', 'float');
       varTypes.set(op.outVar, 'float');
-      glsl.push(`  float ${op.outVar} = sin(${op.inVar});`);
+      glsl.push(`  float ${op.outVar} = sin(${sinInput});`);
       continue;
     }
 
@@ -346,7 +376,10 @@ function buildGlslKernelSource(kernel, buffersByName) {
   glsl.push('}');
 
   if (pushConstants.size > 0) {
-    const pcFields = Array.from(pushConstants).sort().map((name) => `  int ${name.replace(/^pc\./, '')};`).join('\n');
+    const pcFields = Array.from(pushConstants.entries())
+      .sort(([nameA], [nameB]) => nameA.localeCompare(nameB))
+      .map(([name, type]) => `  ${type} ${name.replace(/^pc\./, '')};`)
+      .join('\n');
     const pcBlock = ['layout(push_constant) uniform TomPushConstants {', pcFields, '} pc;'].join('\n');
     for (let i = 0; i < glsl.length; i += 1) {
       if (glsl[i] === 'layout(push_constant) uniform TomPushConstants {') {
@@ -356,7 +389,7 @@ function buildGlslKernelSource(kernel, buffersByName) {
     }
     for (let i = 0; i < glsl.length; i += 1) {
       if (!glsl[i].startsWith('  ')) continue;
-      for (const name of pushConstants) {
+      for (const [name] of pushConstants.entries()) {
         const cleanName = name.replace(/^pc\./, '');
         glsl[i] = glsl[i].replace(new RegExp(`\\b${cleanName}\\b`, 'g'), `pc.${cleanName}`);
       }
@@ -373,13 +406,19 @@ function buildGlslKernelSource(kernel, buffersByName) {
         continue;
       }
       if (!normalizePushBlock) continue;
-      glsl[i] = glsl[i].replace(/^\s*int\s+pc\./, '  int ');
+      glsl[i] = glsl[i].replace(/^\s*(int|uint|float|double|int64_t)\s+pc\./, '  $1 ');
     }
   }
 
   return {
     source: glsl.join('\n'),
     unsupported,
+    localSize,
+    requiredExtensions,
+    bufferBindings,
+    pushConstants: Array.from(pushConstants.entries())
+      .sort(([nameA], [nameB]) => nameA.localeCompare(nameB))
+      .map(([name, glslType]) => ({ name: name.replace(/^pc\./, ''), glslType })),
   };
 }
 
@@ -420,6 +459,13 @@ function buildGpuBackendManifest(inputPath) {
       backends: {
         glsl_compute: {
           entryPoint: 'main',
+          shaderStage: 'compute',
+          language: 'GLSL',
+          glslVersion: 460,
+          localSize: glsl.localSize,
+          requiredExtensions: glsl.requiredExtensions,
+          bufferBindings: glsl.bufferBindings,
+          pushConstants: glsl.pushConstants,
           source: glsl.source,
           unsupported: glsl.unsupported,
         },
