@@ -47,6 +47,7 @@ const gpuState = {
   kernels: new Map(),
   kernelOrder: [],
   dispatches: [],
+  fences: [],
   currentKernel: null,
   backendManifestVersion: 1,
 };
@@ -384,7 +385,7 @@ function buildGlslKernelSource(kernel, buffersByName) {
 
 
 function buildGpuBackendManifest(inputPath) {
-  if (!gpuState.buffers.size && !gpuState.kernelOrder.length && !gpuState.dispatches.length) {
+  if (!gpuState.buffers.size && !gpuState.kernelOrder.length && !gpuState.dispatches.length && !gpuState.fences.length) {
     return null;
   }
 
@@ -396,6 +397,7 @@ function buildGpuBackendManifest(inputPath) {
     uploads: [...gpuState.hostUploads],
     downloads: [...gpuState.hostDownloads],
     dispatches: [...gpuState.dispatches],
+    fences: [...gpuState.fences],
     kernels: [],
   };
 
@@ -1234,10 +1236,11 @@ function emitGpuOperation(line) {
     return true;
   }
 
-  const dispatch = line.match(/^GpuDispx([A-Za-z_][A-Za-z0-9_]*)x(\d+)y(\d+)z(\d+)$/);
+  const dispatch = line.match(/^GpuDisp(Async)?x([A-Za-z_][A-Za-z0-9_]*)x(\d+)y(\d+)z(\d+)$/);
   if (dispatch) {
-    const [, kernelName, xRaw, yRaw, zRaw] = dispatch;
+    const [, asyncSuffix, kernelName, xRaw, yRaw, zRaw] = dispatch;
     const dims = [xRaw, yRaw, zRaw].map((value) => Number.parseInt(value, 10));
+    const isAsync = Boolean(asyncSuffix);
     if (dims.some((value) => !Number.isInteger(value) || value <= 0)) {
       createError(`GpuDisp inválido: dimensões devem ser inteiros positivos (${line}).`);
       return true;
@@ -1248,8 +1251,14 @@ function emitGpuOperation(line) {
       return true;
     }
 
-    gpuState.dispatches.push({ kernelName, x: dims[0], y: dims[1], z: dims[2] });
-    emitInstruction(`; TOM_GPU_DISPATCH kernel=${kernelName} x=${dims[0]} y=${dims[1]} z=${dims[2]}`);
+    gpuState.dispatches.push({ kernelName, x: dims[0], y: dims[1], z: dims[2], async: isAsync });
+    emitInstruction(`; TOM_GPU_DISPATCH kernel=${kernelName} x=${dims[0]} y=${dims[1]} z=${dims[2]} async=${isAsync ? 1 : 0}`);
+    return true;
+  }
+
+  if (line === 'GpuFence' || line === 'AguardarGpu') {
+    gpuState.fences.push({ kind: 'wait', command: line });
+    emitInstruction('; TOM_GPU_FENCE_WAIT');
     return true;
   }
 
@@ -1494,7 +1503,7 @@ if (budgetState.frameTargetFps || budgetState.systems.length || budgetState.prio
   }
 }
 
-if (gpuState.buffers.size || gpuState.kernelOrder.length || gpuState.dispatches.length) {
+if (gpuState.buffers.size || gpuState.kernelOrder.length || gpuState.dispatches.length || gpuState.fences.length) {
   console.log('\nTomGPU (base inicial):');
   if (gpuState.buffers.size) {
     for (const [name, cfg] of gpuState.buffers.entries()) {
@@ -1514,7 +1523,14 @@ if (gpuState.buffers.size || gpuState.kernelOrder.length || gpuState.dispatches.
   }
   if (gpuState.dispatches.length) {
     for (const dispatch of gpuState.dispatches) {
-      console.log(`- Dispatch ${dispatch.kernelName}: (${dispatch.x}, ${dispatch.y}, ${dispatch.z})`);
+      const mode = dispatch.async ? 'async' : 'sync';
+      console.log(`- Dispatch ${dispatch.kernelName}: (${dispatch.x}, ${dispatch.y}, ${dispatch.z}) [${mode}]`);
+    }
+  }
+
+  if (gpuState.fences.length) {
+    for (const fence of gpuState.fences) {
+      console.log(`- Fence GPU: ${fence.command}`);
     }
   }
   if (gpuState.hostDownloads.length) {
