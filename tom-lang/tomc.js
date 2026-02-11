@@ -965,6 +965,94 @@ function emitControlFlow(line) {
 }
 
 function emitDataOperation(line) {
+  const soaVecAdd = line.match(/^ParaCadaSOAx([A-Za-z_][A-Za-z0-9_]*)xSomar([A-Za-z_][A-Za-z0-9_]*?)(-?\d+)$/);
+  if (soaVecAdd) {
+    const [, instanceName, propertyName, amountRaw] = soaVecAdd;
+    const instance = soaVars.get(instanceName);
+    if (!instance) {
+      createError(`ParaCadaSOA falhou: instância '${instanceName}' não foi definida.`);
+      return true;
+    }
+
+    const property = instance.propPointers.get(propertyName);
+    if (!property) {
+      createError(`ParaCadaSOA falhou: propriedade '${propertyName}' não existe em '${instanceName}'.`);
+      return true;
+    }
+
+    if (property.llvmType !== 'i32') {
+      createError(`ParaCadaSOA vetorizado suporta apenas propriedades i32. '${instanceName}.${propertyName}' está como ${property.llvmType}.`);
+      return true;
+    }
+
+    const amount = parseNumber(amountRaw, 'i32', false);
+    if (amount === null) {
+      createError(`ParaCadaSOA inválido: valor '${amountRaw}' fora de i32.`);
+      return true;
+    }
+
+    const preheaderLabel = controlState.currentBlock;
+    const vecCondLabel = nextLabel(`soa_vec4_${instanceName}_${propertyName}_cond`);
+    const vecBodyLabel = nextLabel(`soa_vec4_${instanceName}_${propertyName}_body`);
+    const tailCondLabel = nextLabel(`soa_vec4_${instanceName}_${propertyName}_tail_cond`);
+    const tailBodyLabel = nextLabel(`soa_vec4_${instanceName}_${propertyName}_tail_body`);
+    const exitLabel = nextLabel(`soa_vec4_${instanceName}_${propertyName}_fim`);
+
+    const chunkCount = Math.floor(instance.count / 4);
+    const vecLimit = chunkCount * 4;
+    const vectorAddConst = `<i32 ${amount}, i32 ${amount}, i32 ${amount}, i32 ${amount}>`;
+
+    terminateCurrentBlock(`br label %${vecCondLabel}`);
+    emitLabel(vecCondLabel);
+
+    const vecIndexReg = nextReg();
+    const vecCmpReg = nextReg();
+    const vecNextReg = nextReg();
+    emitInstruction(`${vecIndexReg} = phi i64 [0, %${preheaderLabel}], [${vecNextReg}, %${vecBodyLabel}]`);
+    emitInstruction(`${vecCmpReg} = icmp ult i64 ${vecIndexReg}, ${vecLimit}`);
+    terminateCurrentBlock(`br i1 ${vecCmpReg}, label %${vecBodyLabel}, label %${tailCondLabel}`);
+
+    emitLabel(vecBodyLabel);
+    const elemPtrReg = nextReg();
+    emitInstruction(
+      `${elemPtrReg} = getelementptr inbounds [${instance.count} x i32], [${instance.count} x i32]* ${property.ptr}, i64 0, i64 ${vecIndexReg}`,
+    );
+    const vecPtrReg = nextReg();
+    emitInstruction(`${vecPtrReg} = bitcast i32* ${elemPtrReg} to <4 x i32>*`);
+    const vecLoadReg = nextReg();
+    emitInstruction(`${vecLoadReg} = load <4 x i32>, <4 x i32>* ${vecPtrReg}, align 16`);
+    const vecAddReg = nextReg();
+    emitInstruction(`${vecAddReg} = add <4 x i32> ${vecLoadReg}, ${vectorAddConst}`);
+    emitInstruction(`store <4 x i32> ${vecAddReg}, <4 x i32>* ${vecPtrReg}, align 16`);
+    emitInstruction(`${vecNextReg} = add i64 ${vecIndexReg}, 4`);
+    terminateCurrentBlock(`br label %${vecCondLabel}`);
+
+    emitLabel(tailCondLabel);
+    const tailIndexReg = nextReg();
+    const tailCmpReg = nextReg();
+    const tailNextReg = nextReg();
+    emitInstruction(`${tailIndexReg} = phi i64 [${vecLimit}, %${vecCondLabel}], [${tailNextReg}, %${tailBodyLabel}]`);
+    emitInstruction(`${tailCmpReg} = icmp ult i64 ${tailIndexReg}, ${instance.count}`);
+    terminateCurrentBlock(`br i1 ${tailCmpReg}, label %${tailBodyLabel}, label %${exitLabel}`);
+
+    emitLabel(tailBodyLabel);
+    const tailElemPtrReg = nextReg();
+    emitInstruction(
+      `${tailElemPtrReg} = getelementptr inbounds [${instance.count} x i32], [${instance.count} x i32]* ${property.ptr}, i64 0, i64 ${tailIndexReg}`,
+    );
+    const tailLoadedReg = nextReg();
+    emitInstruction(`${tailLoadedReg} = load i32, i32* ${tailElemPtrReg}`);
+    const tailAddedReg = nextReg();
+    emitInstruction(`${tailAddedReg} = add nsw i32 ${tailLoadedReg}, ${amount}`);
+    emitInstruction(`store i32 ${tailAddedReg}, i32* ${tailElemPtrReg}`);
+    emitInstruction(`${tailNextReg} = add i64 ${tailIndexReg}, 1`);
+    terminateCurrentBlock(`br label %${tailCondLabel}`);
+
+    emitLabel(exitLabel);
+    trackSystemCost((chunkCount * (OP_COSTS.SomarVec4 || 6)) + ((instance.count - vecLimit) * (OP_COSTS.Somar || 1)));
+    return true;
+  }
+
   const defConst = line.match(/^CompDefConstx([A-Za-z_][A-Za-z0-9_]*)y(.+)$/);
   if (defConst) {
     const [, name, expression] = defConst;
