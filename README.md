@@ -995,6 +995,10 @@ A versão atual do tradutor já cobre um bloco inicial funcional, mantendo a fil
   - Cada diretiva mostra *hover* contextual com resumo de orçamento (FPS em ms/frame, limite por sistema e nível de prioridade).
 
 > Dica: para testar rapidamente, edite `tom-lang/teste.tom` e rode `node tom-lang/tomc.js tom-lang/teste.tom`.
+>
+> Para usar MLIR como saída principal: `node tom-lang/tomc.js --emit-mlir tom-lang/teste.tom` (gera `output.mlir` em vez de `output.ll`).
+>
+> Para tentar otimizar/validar o MLIR via ferramenta externa, se disponível no sistema: `node tom-lang/tomc.js --emit-mlir --mlir-opt tom-lang/teste.tom`.
 
 ## Guia prático
 
