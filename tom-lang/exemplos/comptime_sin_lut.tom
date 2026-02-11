@@ -1,0 +1,4 @@
+EscopoInixComptime
+CompGlobalConstFl32xSinLUT360y(()=>{let a=[];for(let i=0;i<360;i++)a.push(Math.sin(i*Math.PI/180));return a;})()
+EscopoFimxComptime
+DefVarInSd32xProntoy1
