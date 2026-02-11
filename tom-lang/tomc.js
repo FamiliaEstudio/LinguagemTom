@@ -926,6 +926,19 @@ function emitVectorOperation(line) {
 }
 
 function emitControlFlow(line) {
+  const deferMatch = line.match(/^Defer(.+)$/);
+  if (deferMatch) {
+    const [, deferredCommand] = deferMatch;
+    const activeScope = controlState.scopeStack[controlState.scopeStack.length - 1];
+    if (!activeScope) {
+      createError(`Defer precisa estar dentro de um EscopoIni/EscopoFim: ${line}`);
+      return true;
+    }
+
+    activeScope.deferStack.push(deferredCommand);
+    return true;
+  }
+
   const scopeStart = line.match(/^EscopoInix([A-Za-z_][A-Za-z0-9_]*)$/);
   if (scopeStart) {
     const [, scopeName] = scopeStart;
@@ -937,6 +950,7 @@ function emitControlFlow(line) {
       startLabel: nextLabel(`escopo_${safe}_ini`),
       endLabel: nextLabel(`escopo_${safe}_fim`),
       enterCycleReg: scopeSystem ? nextReg() : null,
+      deferStack: [],
     };
 
     terminateCurrentBlock(`br label %${scope.startLabel}`);
@@ -955,6 +969,25 @@ function emitControlFlow(line) {
     const currentScope = controlState.scopeStack.pop();
     if (!currentScope || currentScope.scopeName !== scopeName) {
       createError(`EscopoFim inválido: esperado '${currentScope ? currentScope.scopeName : 'nenhum'}', recebido '${scopeName}'.`);
+      return true;
+    }
+
+    while (!firstError && currentScope.deferStack.length > 0) {
+      const deferredLine = currentScope.deferStack.pop();
+      if (emitControlFlow(deferredLine)) {
+        createError(`Defer inválido no escopo '${scopeName}': comando de controle de fluxo não é suportado (${deferredLine}).`);
+        return true;
+      }
+      if (emitGpuOperation(deferredLine)) continue;
+      if (emitBudgetDirective(deferredLine)) continue;
+      if (emitZoneOperation(deferredLine)) continue;
+      if (emitDataOperation(deferredLine)) continue;
+      if (emitNumericOperation(deferredLine)) continue;
+      if (emitVectorOperation(deferredLine)) continue;
+      if (emitStringOperation(deferredLine)) continue;
+      if (emitText(deferredLine)) continue;
+
+      createError(`Comando Defer não reconhecido: ${deferredLine}`);
       return true;
     }
 
