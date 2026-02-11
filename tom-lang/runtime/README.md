@@ -5,7 +5,7 @@ Runtime host mínimo para executar o `output.ll` compilado da Linguagem Tom e ap
 ## Build do host
 
 ```bash
-g++ -std=c++17 tom_gpu_host.cpp -o tom_gpu_host -lSDL2 -ldl -rdynamic
+g++ -std=c++17 tom_gpu_host.cpp -o tom_gpu_host -lSDL2 -lGLEW -lGL -ldl -rdynamic
 ```
 
 ## Pipeline completo
@@ -20,7 +20,7 @@ clang -shared -fPIC ../exemplos/output.ll -o ../exemplos/output.so
 ```
 3. Executar host SDL2:
 ```bash
-./tom_gpu_host ../exemplos/output.so
+./tom_gpu_host ../exemplos/output.so ../exemplos/output.gpu.json
 ```
 
 > `-rdynamic` é obrigatório para que o símbolo `TomGpu_Present` definido no host possa ser resolvido pelo módulo carregado via `dlopen`.
