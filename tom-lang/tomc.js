@@ -60,6 +60,7 @@ const controlState = {
   currentBlock: 'entry',
   blockTerminated: false,
 };
+const zoneState = new Map();
 const structState = {
   currentDefinition: null,
 };
@@ -1313,6 +1314,92 @@ function emitDataOperation(line) {
   return false;
 }
 
+function emitZoneOperation(line) {
+  const zoneDef = line.match(/^ZonaDefx([A-Za-z_][A-Za-z0-9_]*)y(\d+)$/);
+  if (zoneDef) {
+    const [, zoneName, sizeRaw] = zoneDef;
+    const size = Number.parseInt(sizeRaw, 10);
+    if (!Number.isInteger(size) || size <= 0) {
+      createError(`ZonaDef inválido: tamanho '${sizeRaw}' em ${line}`);
+      return true;
+    }
+
+    if (zoneState.has(zoneName)) {
+      createError(`ZonaDef duplicado para '${zoneName}'.`);
+      return true;
+    }
+
+    const llvmGlobal = `@tom_zone_${zoneName}`;
+    globals.push(`${llvmGlobal} = global [${size} x i8] zeroinitializer`);
+    zoneState.set(zoneName, {
+      size,
+      offset: 0,
+      llvmGlobal,
+      allocatedVars: new Set(),
+    });
+    return true;
+  }
+
+  const defZoneInt = line.match(/^DefZnIn(?:Sd|Ud)?32x([A-Za-z_][A-Za-z0-9_]*)y([^\s]+)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (defZoneInt) {
+    const [, name, valueRaw, zoneName] = defZoneInt;
+    const zone = zoneState.get(zoneName);
+    if (!zone) {
+      createError(`DefZnIn32 falhou: zona '${zoneName}' não foi definida.`);
+      return true;
+    }
+
+    if (numericVars.has(name) || compileTimeConsts.has(name)) {
+      createError(`DefZnIn32 duplicado para variável '${name}'.`);
+      return true;
+    }
+
+    const bytesNeeded = 4;
+    if ((zone.offset + bytesNeeded) > zone.size) {
+      createError(`DefZnIn32 falhou: zona '${zoneName}' sem espaço (offset=${zone.offset}, tamanho=${zone.size}).`);
+      return true;
+    }
+
+    const valueRes = resolveNumericOperand(valueRaw, 'i32', false);
+    if (valueRes.error) {
+      createError(valueRes.error);
+      return true;
+    }
+
+    const bytePtr = nextReg();
+    emitInstruction(
+      `${bytePtr} = getelementptr inbounds [${zone.size} x i8], [${zone.size} x i8]* ${zone.llvmGlobal}, i64 0, i64 ${zone.offset}`,
+    );
+    const intPtr = nextReg();
+    emitInstruction(`${intPtr} = bitcast i8* ${bytePtr} to i32*`);
+    emitInstruction(`store i32 ${valueRes.value}, i32* ${intPtr}`);
+
+    numericVars.set(name, { llvmType: 'i32', ptr: intPtr });
+    zone.allocatedVars.add(name);
+    zone.offset += bytesNeeded;
+    return true;
+  }
+
+  const zoneReset = line.match(/^ZonaRstx([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (zoneReset) {
+    const [, zoneName] = zoneReset;
+    const zone = zoneState.get(zoneName);
+    if (!zone) {
+      createError(`ZonaRst falhou: zona '${zoneName}' não foi definida.`);
+      return true;
+    }
+
+    for (const varName of zone.allocatedVars) {
+      numericVars.delete(varName);
+    }
+    zone.allocatedVars.clear();
+    zone.offset = 0;
+    return true;
+  }
+
+  return false;
+}
+
 function emitStringOperation(line) {
   const defStack = line.match(/^DefStkFB(\d+)(C|U)?x([A-Za-z_][A-Za-z0-9_]*)yl'([^']*)'$/);
   if (defStack) {
@@ -1859,6 +1946,7 @@ for (const line of lines) {
   if (emitControlFlow(line)) continue;
   if (emitGpuOperation(line)) continue;
   if (emitBudgetDirective(line)) continue;
+  if (emitZoneOperation(line)) continue;
   if (emitDataOperation(line)) continue;
   if (emitNumericOperation(line)) continue;
   if (emitVectorOperation(line)) continue;
