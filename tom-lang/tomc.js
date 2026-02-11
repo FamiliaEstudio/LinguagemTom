@@ -243,7 +243,92 @@ function parseNumber(value, llvmType, isFloat) {
   return String(num);
 }
 
+function parseSoaPropertyAccess(raw) {
+  const match = raw.match(/^([A-Za-z_][A-Za-z0-9_]*)@(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+)\.([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (!match) return null;
+
+  const [, instanceName, indexRaw, propertyName] = match;
+  return { instanceName, indexRaw, propertyName };
+}
+
+function resolveSoaIndex(indexRaw, count) {
+  if (indexRaw.startsWith('@')) {
+    const indexVarName = indexRaw.slice(1);
+    const indexVar = numericVars.get(indexVarName);
+    if (!indexVar) {
+      return { error: `Índice SOA inválido: variável '${indexVarName}' não foi definida.` };
+    }
+    if (indexVar.llvmType !== 'i32' && indexVar.llvmType !== 'i64') {
+      return { error: `Índice SOA inválido: '${indexVarName}' precisa ser i32/i64, encontrado ${indexVar.llvmType}.` };
+    }
+
+    const loadedIndex = nextReg();
+    emitInstruction(`${loadedIndex} = load ${indexVar.llvmType}, ${indexVar.llvmType}* ${indexVar.ptr}`);
+    if (indexVar.llvmType === 'i64') {
+      return { value: loadedIndex };
+    }
+
+    const widened = nextReg();
+    emitInstruction(`${widened} = sext i32 ${loadedIndex} to i64`);
+    return { value: widened };
+  }
+
+  const parsed = Number.parseInt(indexRaw, 10);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return { error: `Índice SOA inválido: '${indexRaw}'.` };
+  }
+  if (parsed >= count) {
+    return { error: `Índice SOA fora do limite: ${parsed} (tamanho ${count}).` };
+  }
+
+  return { value: String(parsed) };
+}
+
+function resolveSoaPropertyPointer(raw, expectedType = null) {
+  const access = parseSoaPropertyAccess(raw);
+  if (!access) return null;
+
+  const soaInstance = soaVars.get(access.instanceName);
+  if (!soaInstance) {
+    return { error: `Acesso SOA inválido: instância '${access.instanceName}' não foi definida.` };
+  }
+
+  const property = soaInstance.propPointers.get(access.propertyName);
+  if (!property) {
+    return { error: `Acesso SOA inválido: propriedade '${access.propertyName}' não existe em '${access.instanceName}'.` };
+  }
+
+  if (expectedType && property.llvmType !== expectedType) {
+    return {
+      error: `Acesso SOA incompatível: '${access.instanceName}@${access.indexRaw}.${access.propertyName}' é ${property.llvmType}, esperado ${expectedType}.`,
+    };
+  }
+
+  const index = resolveSoaIndex(access.indexRaw, soaInstance.count);
+  if (index.error) return { error: index.error };
+
+  const elementPtr = nextReg();
+  emitInstruction(
+    `${elementPtr} = getelementptr inbounds [${soaInstance.count} x ${property.llvmType}], [${soaInstance.count} x ${property.llvmType}]* ${property.ptr}, i64 0, i64 ${index.value}`,
+  );
+
+  return {
+    ptr: elementPtr,
+    llvmType: property.llvmType,
+    access,
+  };
+}
+
 function resolveNumericOperand(raw, llvmType, isFloat) {
+  const soaPointer = resolveSoaPropertyPointer(raw, llvmType);
+  if (soaPointer) {
+    if (soaPointer.error) return { error: soaPointer.error };
+
+    const loaded = nextReg();
+    emitInstruction(`${loaded} = load ${llvmType}, ${llvmType}* ${soaPointer.ptr}`);
+    return { value: loaded };
+  }
+
   if (raw.startsWith('@')) {
     const name = raw.slice(1);
 
@@ -648,7 +733,7 @@ function emitBudgetDirective(line) {
 }
 
 function emitNumericOperation(line) {
-  const numberOperand = '(@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(?:\\.\\d+)?)';
+  const numberOperand = '([A-Za-z_][A-Za-z0-9_]*@(?:@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+)\\.[A-Za-z_][A-Za-z0-9_]*|@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(?:\\.\\d+)?)';
   const mathRegex = new RegExp(`^(Somar|Subtr|Multi|Divid)xy(In)(Sd|Ud)(32|64)x${numberOperand}y${numberOperand}$`);
   const floatRegex = new RegExp(`^(Somar|Subtr|Multi|Divid)xy(Fl)(32|64)x${numberOperand}y${numberOperand}$`);
   const sinRegex = /^GpuMathSinFl32x(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)$/;
@@ -922,23 +1007,36 @@ function emitDataOperation(line) {
     return true;
   }
 
-  const setInt = line.match(/^SetVar(In)(Sd|Ud)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([^\s]+)$/);
+  const setInt = line.match(/^SetVar(In)(Sd|Ud)(32|64)x(.+?)y([^\s]+)$/);
   if (setInt) {
-    const [, , , bits, name, valueRaw] = setInt;
+    const [, , , bits, targetRaw, valueRaw] = setInt;
     const llvmType = bits === '32' ? 'i32' : 'i64';
-    const target = numericVars.get(name);
-    if (!target) {
-      createError(`SetVar falhou: variável '${name}' não foi definida.`);
-      return true;
-    }
-    if (target.llvmType !== llvmType) {
-      createError(`SetVar incompatível: '${name}' é ${target.llvmType}, comando usa ${llvmType}.`);
-      return true;
-    }
 
     const valueRes = resolveNumericOperand(valueRaw, llvmType, false);
     if (valueRes.error) {
       createError(valueRes.error);
+      return true;
+    }
+
+    const soaTarget = resolveSoaPropertyPointer(targetRaw, llvmType);
+    if (soaTarget) {
+      if (soaTarget.error) {
+        createError(soaTarget.error);
+        return true;
+      }
+
+      emitInstruction(`store ${llvmType} ${valueRes.value}, ${llvmType}* ${soaTarget.ptr}`);
+      lastNumericValue = { reg: valueRes.value, llvmType };
+      return true;
+    }
+
+    const target = numericVars.get(targetRaw);
+    if (!target) {
+      createError(`SetVar falhou: variável '${targetRaw}' não foi definida.`);
+      return true;
+    }
+    if (target.llvmType !== llvmType) {
+      createError(`SetVar incompatível: '${targetRaw}' é ${target.llvmType}, comando usa ${llvmType}.`);
       return true;
     }
 
@@ -947,23 +1045,36 @@ function emitDataOperation(line) {
     return true;
   }
 
-  const setFloat = line.match(/^SetVar(Fl)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([^\s]+)$/);
+  const setFloat = line.match(/^SetVar(Fl)(32|64)x(.+?)y([^\s]+)$/);
   if (setFloat) {
-    const [, , bits, name, valueRaw] = setFloat;
+    const [, , bits, targetRaw, valueRaw] = setFloat;
     const llvmType = bits === '32' ? 'float' : 'double';
-    const target = numericVars.get(name);
-    if (!target) {
-      createError(`SetVar falhou: variável '${name}' não foi definida.`);
-      return true;
-    }
-    if (target.llvmType !== llvmType) {
-      createError(`SetVar incompatível: '${name}' é ${target.llvmType}, comando usa ${llvmType}.`);
-      return true;
-    }
 
     const valueRes = resolveNumericOperand(valueRaw, llvmType, true);
     if (valueRes.error) {
       createError(valueRes.error);
+      return true;
+    }
+
+    const soaTarget = resolveSoaPropertyPointer(targetRaw, llvmType);
+    if (soaTarget) {
+      if (soaTarget.error) {
+        createError(soaTarget.error);
+        return true;
+      }
+
+      emitInstruction(`store ${llvmType} ${valueRes.value}, ${llvmType}* ${soaTarget.ptr}`);
+      lastNumericValue = { reg: valueRes.value, llvmType };
+      return true;
+    }
+
+    const target = numericVars.get(targetRaw);
+    if (!target) {
+      createError(`SetVar falhou: variável '${targetRaw}' não foi definida.`);
+      return true;
+    }
+    if (target.llvmType !== llvmType) {
+      createError(`SetVar incompatível: '${targetRaw}' é ${target.llvmType}, comando usa ${llvmType}.`);
       return true;
     }
 
