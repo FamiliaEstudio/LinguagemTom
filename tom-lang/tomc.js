@@ -2718,8 +2718,11 @@ function emitDataOperation(line) {
       return true;
     }
 
-    if (property.llvmType !== 'i32') {
-      createError(`ParaCadaSOA vetorizado suporta apenas propriedades i32. '${instanceName}.${propertyName}' está como ${property.llvmType}.`);
+    const mlirElementType = property.llvmType === 'i32'
+      ? 'i32'
+      : (property.llvmType === 'float' ? 'f32' : null);
+    if (!mlirElementType) {
+      createError(`ParaCadaSOA vetorizado em MLIR suporta propriedades i32/f32. '${instanceName}.${propertyName}' está como ${property.llvmType}.`);
       return true;
     }
 
@@ -2734,10 +2737,15 @@ function emitDataOperation(line) {
       propertyName,
       count: instance.count,
       amount,
-      elementType: 'i32',
+      elementType: mlirElementType,
     });
     mlirState.paraCadaSoaModules.push(paraCadaSoaModule);
-    emitInstruction(`; MLIR lowering (ParaCadaSOA affine.for) -> output.mlir [soa ${mlirState.paraCadaSoaModules.length - 1}]`);
+    emitInstruction(`; MLIR lowering (ParaCadaSOA affine.for+vector.load/store) -> output.mlir [soa ${mlirState.paraCadaSoaModules.length - 1}]`);
+
+    if (property.llvmType !== 'i32') {
+      emitInstruction(`; LLVM fallback indisponível para ParaCadaSOA ${instanceName}.${propertyName} (${property.llvmType}); otimização emitida apenas em MLIR.`);
+      return true;
+    }
 
     const preheaderLabel = controlState.currentBlock;
     const vecCondLabel = nextLabel(`soa_vec4_${instanceName}_${propertyName}_cond`);

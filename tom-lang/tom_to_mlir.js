@@ -205,6 +205,12 @@ class FunctionLoweringContext {
   }
 }
 
+
+function buildDenseVectorConstant(amount, elementType, vectorWidth) {
+  const value = elementType === 'f32' ? Number(amount).toFixed(1) : String(amount);
+  return `dense<${value}> : vector<${vectorWidth}x${elementType}>`;
+}
+
 function resolveLoopBound(bound, ctx) {
   if (typeof bound === 'number') {
     return { kind: 'constant', value: bound };
@@ -313,6 +319,46 @@ function renderTomIrNode(node, ctx) {
     const addOp = node.elementType === 'f32' ? 'arith.addf' : 'arith.addi';
     printer.line(`${sumReg} = ${addOp} ${loadReg}, ${cstReg} : ${node.elementType}`);
     printer.line(`affine.store ${sumReg}, ${node.bufferArg}[${node.indexVar}] : memref<?x${node.elementType}>`);
+    return;
+  }
+
+  if (node.kind === 'TomIR.ParaCadaSoaLowering') {
+    const vectorType = `vector<${node.vectorWidth}x${node.elementType}>`;
+    const addOp = node.elementType === 'f32' ? 'arith.addf' : 'arith.addi';
+    const scalarAddOp = node.elementType === 'f32' ? 'arith.addf' : 'arith.addi';
+    const vectorConstValue = buildDenseVectorConstant(node.amount, node.elementType, node.vectorWidth);
+    const scalarConstValue = node.elementType === 'f32' ? Number(node.amount).toFixed(1) : String(node.amount);
+
+    const widthCst = ctx.freshValue('cst');
+    printer.line(`${widthCst} = arith.constant ${node.vectorWidth} : index`);
+    const vecSteps = ctx.freshValue('vecsteps');
+    printer.line(`${vecSteps} = arith.divui ${node.countArg}, ${widthCst} : index`);
+    const vecUpper = ctx.freshValue('vecupper');
+    printer.line(`${vecUpper} = arith.muli ${vecSteps}, ${widthCst} : index`);
+
+    const vecConst = ctx.freshValue('vecaddcst');
+    printer.line(`${vecConst} = arith.constant ${vectorConstValue}`);
+
+    printer.block(`affine.for %i = 0 to ${vecUpper} step ${node.vectorWidth}`, () => {
+      const vecLoaded = ctx.freshValue('vecload');
+      const vecSum = ctx.freshValue('vecsum');
+      printer.line(`${vecLoaded} = vector.load ${node.bufferArg}[%i] : memref<?x${node.elementType}>, ${vectorType}`);
+      printer.line(`${vecSum} = ${addOp} ${vecLoaded}, ${vecConst} : ${vectorType}`);
+      printer.line(`vector.store ${vecSum}, ${node.bufferArg}[%i] : memref<?x${node.elementType}>, ${vectorType}`);
+      printer.line('affine.yield');
+    });
+
+    const scalarConst = ctx.freshValue('addcst');
+    printer.line(`${scalarConst} = arith.constant ${scalarConstValue} : ${node.elementType}`);
+
+    printer.block(`affine.for %i = ${vecUpper} to ${node.countArg} step 1`, () => {
+      const loaded = ctx.freshValue('loaded');
+      const sum = ctx.freshValue('sum');
+      printer.line(`${loaded} = affine.load ${node.bufferArg}[%i] : memref<?x${node.elementType}>`);
+      printer.line(`${sum} = ${scalarAddOp} ${loaded}, ${scalarConst} : ${node.elementType}`);
+      printer.line(`affine.store ${sum}, ${node.bufferArg}[%i] : memref<?x${node.elementType}>`);
+      printer.line('affine.yield');
+    });
     return;
   }
 

@@ -99,6 +99,17 @@ class TomIrSoaAddScalar extends TomIrNode {
   }
 }
 
+class TomIrParaCadaSoaLowering extends TomIrNode {
+  constructor({ bufferArg, countArg, amount, elementType = 'f32', vectorWidth = 4 }) {
+    super('TomIR.ParaCadaSoaLowering');
+    this.bufferArg = bufferArg;
+    this.countArg = countArg;
+    this.amount = amount;
+    this.elementType = elementType;
+    this.vectorWidth = vectorWidth;
+  }
+}
+
 function sanitizeSymbol(value) {
   return String(value || 'anon').replace(/[^A-Za-z0-9_]/g, '_').toLowerCase();
 }
@@ -107,7 +118,7 @@ function buildParaCadaSoaTomIr({ instanceName, propertyName, count, amount, elem
   const symbol = `paracadasoa_${sanitizeSymbol(instanceName)}_${sanitizeSymbol(propertyName)}`;
   const bufferArg = `%${sanitizeSymbol(propertyName)}_buffer`;
   const countArg = '%n';
-  const loopIv = '%i';
+  const vectorWidth = count % 8 === 0 ? 8 : 4;
 
   return new TomIrModule({
     name: symbol,
@@ -119,12 +130,12 @@ function buildParaCadaSoaTomIr({ instanceName, propertyName, count, amount, elem
           { name: countArg, type: 'index', staticValue: count },
         ],
         body: [
-          new TomIrAffineFor({
-            iv: loopIv,
-            lowerBound: 0,
-            upperBound: countArg,
-            step: 1,
-            body: [new TomIrSoaAddScalar({ bufferArg, indexVar: loopIv, amount, elementType })],
+          new TomIrParaCadaSoaLowering({
+            bufferArg,
+            countArg,
+            amount,
+            elementType,
+            vectorWidth,
           }),
         ],
       }),
@@ -168,6 +179,7 @@ module.exports = {
   TomIrFunction,
   TomIrAffineFor,
   TomIrSoaAddScalar,
+  TomIrParaCadaSoaLowering,
   TomIrLocalVar,
   TomIrAssign,
   TomIrBinaryOp,
