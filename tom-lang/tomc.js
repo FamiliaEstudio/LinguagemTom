@@ -485,11 +485,25 @@ function buildGlslKernelSource(kernel, buffersByName) {
   glsl.push('} pc;');
   glsl.push('');
   glsl.push('void main() {');
+  let indentLevel = 1;
+
+  function emitMainLine(code) {
+    glsl.push(`${'  '.repeat(Math.max(indentLevel, 0))}${code}`);
+  }
+
+  function selectComparisonType(leftType, rightType) {
+    if (leftType && rightType && leftType === rightType) return leftType;
+    const priority = ['double', 'float', 'int64_t', 'uint', 'int'];
+    for (const candidate of priority) {
+      if (leftType === candidate || rightType === candidate) return candidate;
+    }
+    return leftType || rightType || 'int';
+  }
 
   for (const op of kernel.ops) {
     if (op.kind === 'id') {
       varTypes.set(op.idVar, 'uint');
-      glsl.push(`  uint ${op.idVar} = gl_GlobalInvocationID.x;`);
+      emitMainLine(`uint ${op.idVar} = gl_GlobalInvocationID.x;`);
       continue;
     }
 
@@ -502,7 +516,7 @@ function buildGlslKernelSource(kernel, buffersByName) {
       registerPushConstant(op.indexVar, 'uint');
       const indexExpr = coerceSymbol(op.indexVar, 'uint', 'uint');
       varTypes.set(op.outVar, glslType);
-      glsl.push(`  ${glslType} ${op.outVar} = ${op.bufferName}.data[${indexExpr}];`);
+      emitMainLine(`${glslType} ${op.outVar} = ${op.bufferName}.data[${indexExpr}];`);
       continue;
     }
 
@@ -516,7 +530,7 @@ function buildGlslKernelSource(kernel, buffersByName) {
       registerPushConstant(op.indexVar, 'uint');
       const indexExpr = coerceSymbol(op.indexVar, 'uint', 'uint');
       const valueExpr = coerceSymbol(op.inVar, targetType, targetType);
-      glsl.push(`  ${op.bufferName}.data[${indexExpr}] = ${valueExpr};`);
+      emitMainLine(`${op.bufferName}.data[${indexExpr}] = ${valueExpr};`);
       continue;
     }
 
@@ -530,7 +544,7 @@ function buildGlslKernelSource(kernel, buffersByName) {
       const leftExpr = coerceSymbol(op.leftVar, leftType, leftType);
       const rightExpr = coerceSymbol(op.rightVar, leftType, leftType);
       varTypes.set(op.outVar, leftType);
-      glsl.push(`  ${leftType} ${op.outVar} = ${leftExpr} ${operator} ${rightExpr};`);
+      emitMainLine(`${leftType} ${op.outVar} = ${leftExpr} ${operator} ${rightExpr};`);
       continue;
     }
 
@@ -542,7 +556,28 @@ function buildGlslKernelSource(kernel, buffersByName) {
       }
       const sinInput = coerceSymbol(op.inVar, 'float', 'float');
       varTypes.set(op.outVar, 'float');
-      glsl.push(`  float ${op.outVar} = sin(${sinInput});`);
+      emitMainLine(`float ${op.outVar} = sin(${sinInput});`);
+      continue;
+    }
+
+    if (op.kind === 'branch_start') {
+      const leftType = varTypes.get(op.leftVar);
+      const rightType = varTypes.get(op.rightVar);
+      const compareType = selectComparisonType(leftType, rightType);
+      const leftExpr = coerceSymbol(op.leftVar, compareType, compareType);
+      const rightExpr = coerceSymbol(op.rightVar, compareType, compareType);
+      emitMainLine(`if (${leftExpr} > ${rightExpr}) {`);
+      indentLevel += 1;
+      continue;
+    }
+
+    if (op.kind === 'branch_end') {
+      if (indentLevel <= 1) {
+        unsupported.push('GpuFimSe sem bloco condicional correspondente.');
+        continue;
+      }
+      indentLevel -= 1;
+      emitMainLine('}');
       continue;
     }
 
@@ -552,6 +587,12 @@ function buildGlslKernelSource(kernel, buffersByName) {
     }
 
     unsupported.push(`Operação de kernel desconhecida: ${op.kind}`);
+  }
+
+  while (indentLevel > 1) {
+    indentLevel -= 1;
+    emitMainLine('}');
+    unsupported.push('Kernel finalizado com bloco condicional aberto; fechando automaticamente no GLSL gerado.');
   }
 
   glsl.push('}');
@@ -1614,7 +1655,7 @@ function emitGpuOperation(line) {
       return true;
     }
 
-    const kernel = { name: kernelName, ops: [] };
+    const kernel = { name: kernelName, ops: [], branchDepth: 0 };
     gpuState.currentKernel = kernel;
     gpuState.kernels.set(kernelName, kernel);
     gpuState.kernelOrder.push(kernelName);
@@ -1625,6 +1666,11 @@ function emitGpuOperation(line) {
   if (line === 'FimDef') {
     if (!gpuState.currentKernel) {
       createError('FimDef encontrado sem DefKernel ativo.');
+      return true;
+    }
+
+    if (gpuState.currentKernel.branchDepth > 0) {
+      createError(`Kernel '${gpuState.currentKernel.name}' finalizado com ${gpuState.currentKernel.branchDepth} bloco(s) GpuSeMaior sem GpuFimSe.`);
       return true;
     }
 
@@ -1684,6 +1730,26 @@ function emitGpuOperation(line) {
     const [, idVar] = kernelId;
     gpuState.currentKernel.ops.push({ kind: 'id', idVar });
     emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=id var=${idVar}`);
+    return true;
+  }
+
+  const kernelBranchStart = line.match(/^GpuSeMaiorxVarAyVarBx([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelBranchStart) {
+    const [, leftVar, rightVar] = kernelBranchStart;
+    gpuState.currentKernel.ops.push({ kind: 'branch_start', leftVar, rightVar });
+    gpuState.currentKernel.branchDepth += 1;
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=branch_start left=${leftVar} right=${rightVar}`);
+    return true;
+  }
+
+  if (line === 'GpuFimSe') {
+    if (gpuState.currentKernel.branchDepth <= 0) {
+      createError(`GpuFimSe sem GpuSeMaior correspondente no kernel '${gpuState.currentKernel.name}'.`);
+      return true;
+    }
+    gpuState.currentKernel.ops.push({ kind: 'branch_end' });
+    gpuState.currentKernel.branchDepth -= 1;
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=branch_end`);
     return true;
   }
 
