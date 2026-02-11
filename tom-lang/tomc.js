@@ -20,6 +20,8 @@ let hasExit = false;
 let hasScanf = false;
 let hasTomGpuPresent = false;
 let hasTomGpuReadInput = false;
+let hasTomGpuQueueAudio = false;
+let hasSinf = false;
 let lastNumericValue = null;
 let lastTextPointer = null;
 let lastTextLength = 0;
@@ -305,7 +307,7 @@ function buildGlslKernelSource(kernel, buffersByName) {
     }
 
     if (op.kind === 'math_scalar') {
-      const leftType = varTypes.get(op.leftVar) || 'int';
+      const leftType = scalarToGlslType(op.scalarType) || varTypes.get(op.leftVar) || 'int';
       const operator = { Somar: '+', Subtr: '-', Multi: '*', Divid: '/' }[op.op];
       if (!operator) {
         unsupported.push(`math_scalar op não suportada: ${op.op}`);
@@ -315,6 +317,18 @@ function buildGlslKernelSource(kernel, buffersByName) {
       markExternalSymbol(op.rightVar);
       varTypes.set(op.outVar, leftType);
       glsl.push(`  ${leftType} ${op.outVar} = ${op.leftVar} ${operator} ${op.rightVar};`);
+      continue;
+    }
+
+
+    if (op.kind === 'sin_scalar') {
+      if (op.scalarType !== 'Fl32') {
+        unsupported.push(`sin_scalar não suportado para ${op.scalarType}`);
+        continue;
+      }
+      markExternalSymbol(op.inVar);
+      varTypes.set(op.outVar, 'float');
+      glsl.push(`  float ${op.outVar} = sin(${op.inVar});`);
       continue;
     }
 
@@ -519,9 +533,10 @@ function emitBudgetDirective(line) {
 }
 
 function emitNumericOperation(line) {
-  const numberOperand = '(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)';
+  const numberOperand = '(@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(?:\\.\\d+)?)';
   const mathRegex = new RegExp(`^(Somar|Subtr|Multi|Divid)xy(In)(Sd|Ud)(32|64)x${numberOperand}y${numberOperand}$`);
   const floatRegex = new RegExp(`^(Somar|Subtr|Multi|Divid)xy(Fl)(32|64)x${numberOperand}y${numberOperand}$`);
+  const sinRegex = /^GpuMathSinFl32x(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)$/;
 
   const im = line.match(mathRegex);
   if (im) {
@@ -573,6 +588,22 @@ function emitNumericOperation(line) {
     emitInstruction(`${reg} = ${opMap[op]} ${llvmType} ${x.value}, ${y.value}`);
     trackSystemCost(OP_COSTS[op] || 1);
     lastNumericValue = { reg, llvmType };
+    return true;
+  }
+
+  const sm = line.match(sinRegex);
+  if (sm) {
+    const [, valueRaw] = sm;
+    const value = resolveNumericOperand(valueRaw, 'float', true);
+    if (value.error) {
+      createError(value.error);
+      return true;
+    }
+
+    const reg = nextReg();
+    hasSinf = true;
+    emitInstruction(`${reg} = call float @llvm.sin.f32(float ${value.value})`);
+    lastNumericValue = { reg, llvmType: 'float' };
     return true;
   }
 
@@ -979,11 +1010,12 @@ function emitGpuOperation(line) {
 
     const scalarType = `${typePrefix}${bits}`;
     const bufferConfig = { scalarType, count, llvmPtr: null };
-    if (scalarType === 'In32') {
+    if (scalarType === 'In32' || scalarType === 'Fl32') {
+      const llvmScalar = scalarType === 'In32' ? 'i32' : 'float';
       const allocaReg = nextReg();
-      emitInstruction(`${allocaReg} = alloca [${count} x i32]`);
+      emitInstruction(`${allocaReg} = alloca [${count} x ${llvmScalar}]`);
       const ptrReg = nextReg();
-      emitInstruction(`${ptrReg} = getelementptr inbounds [${count} x i32], [${count} x i32]* ${allocaReg}, i64 0, i64 0`);
+      emitInstruction(`${ptrReg} = getelementptr inbounds [${count} x ${llvmScalar}], [${count} x ${llvmScalar}]* ${allocaReg}, i64 0, i64 0`);
       bufferConfig.llvmPtr = ptrReg;
     }
 
@@ -1070,6 +1102,34 @@ function emitGpuOperation(line) {
     gpuState.hostUploads.push({ scalarType, hostVar, gpuBuffer });
     emitInstruction(`; TOM_GPU_UPLOAD type=${scalarType} host=${hostVar} device=${gpuBuffer}`);
     trackSystemCost(OP_COSTS.GpuEnv);
+    return true;
+  }
+
+  const queueAudio = line.match(/^GpuEnfileirarAudioFl32x([A-Za-z_][A-Za-z0-9_]*)x([^\s]+)$/);
+  if (queueAudio) {
+    const [, bufferName, countRaw] = queueAudio;
+    const source = gpuState.buffers.get(bufferName);
+    if (!source) {
+      createError(`GpuEnfileirarAudio falhou: buffer '${bufferName}' não foi criado.`);
+      return true;
+    }
+    if (source.scalarType !== 'Fl32') {
+      createError(`GpuEnfileirarAudio exige buffer Fl32. '${bufferName}' está como ${source.scalarType}.`);
+      return true;
+    }
+    if (!source.llvmPtr) {
+      createError(`GpuEnfileirarAudio falhou: ponteiro LLVM do buffer '${bufferName}' indisponível.`);
+      return true;
+    }
+
+    const count = resolveNumericOperand(countRaw, 'i32', false);
+    if (count.error) {
+      createError(count.error);
+      return true;
+    }
+
+    hasTomGpuQueueAudio = true;
+    emitInstruction(`call void @TomGpu_EnfileirarAudio(float* ${source.llvmPtr}, i32 ${count.value})`);
     return true;
   }
 
@@ -1177,49 +1237,61 @@ function emitGpuOperation(line) {
     return true;
   }
 
-  const kernelLoadScalar = line.match(/^GpuLerIn32x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  const kernelLoadScalar = line.match(/^GpuLer(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
   if (kernelLoadScalar) {
-    const [, bufferName, indexVar, outVar] = kernelLoadScalar;
+    const [, typePrefix, bits, bufferName, indexVar, outVar] = kernelLoadScalar;
     const buffer = gpuState.buffers.get(bufferName);
+    const scalarType = `${typePrefix}${bits}`;
     if (!buffer) {
-      createError(`GpuLerIn32 falhou: buffer '${bufferName}' não foi criado.`);
+      createError(`GpuLer${scalarType} falhou: buffer '${bufferName}' não foi criado.`);
       return true;
     }
-    if (buffer.scalarType !== 'In32') {
-      createError(`GpuLerIn32 exige buffer In32. '${bufferName}' está como ${buffer.scalarType}.`);
+    if (buffer.scalarType !== scalarType) {
+      createError(`GpuLer${scalarType} exige buffer ${scalarType}. '${bufferName}' está como ${buffer.scalarType}.`);
       return true;
     }
 
-    gpuState.currentKernel.ops.push({ kind: 'load_scalar', scalarType: 'In32', bufferName, indexVar, outVar });
-    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=load_scalar type=In32 buffer=${bufferName} index=${indexVar} out=${outVar}`);
+    gpuState.currentKernel.ops.push({ kind: 'load_scalar', scalarType, bufferName, indexVar, outVar });
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=load_scalar type=${scalarType} buffer=${bufferName} index=${indexVar} out=${outVar}`);
     return true;
   }
 
-  const kernelStoreScalar = line.match(/^GpuEscrIn32x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  const kernelStoreScalar = line.match(/^GpuEscr(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
   if (kernelStoreScalar) {
-    const [, bufferName, indexVar, inVar] = kernelStoreScalar;
+    const [, typePrefix, bits, bufferName, indexVar, inVar] = kernelStoreScalar;
     const buffer = gpuState.buffers.get(bufferName);
+    const scalarType = `${typePrefix}${bits}`;
     if (!buffer) {
-      createError(`GpuEscrIn32 falhou: buffer '${bufferName}' não foi criado.`);
+      createError(`GpuEscr${scalarType} falhou: buffer '${bufferName}' não foi criado.`);
       return true;
     }
-    if (buffer.scalarType !== 'In32') {
-      createError(`GpuEscrIn32 exige buffer In32. '${bufferName}' está como ${buffer.scalarType}.`);
+    if (buffer.scalarType !== scalarType) {
+      createError(`GpuEscr${scalarType} exige buffer ${scalarType}. '${bufferName}' está como ${buffer.scalarType}.`);
       return true;
     }
 
-    gpuState.currentKernel.ops.push({ kind: 'store_scalar', scalarType: 'In32', bufferName, indexVar, inVar });
-    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=store_scalar type=In32 buffer=${bufferName} index=${indexVar} in=${inVar}`);
+    gpuState.currentKernel.ops.push({ kind: 'store_scalar', scalarType, bufferName, indexVar, inVar });
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=store_scalar type=${scalarType} buffer=${bufferName} index=${indexVar} in=${inVar}`);
     return true;
   }
 
-  const kernelMathScalar = line.match(/^(Somar|Subtr|Multi|Divid)In32x(@?[A-Za-z_][A-Za-z0-9_]*)y(@?[A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  const kernelMathScalar = line.match(/^(Somar|Subtr|Multi|Divid)(Fl|In)(32|64)x(@?[A-Za-z_][A-Za-z0-9_]*)y(@?[A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
   if (kernelMathScalar) {
-    const [, op, leftRaw, rightRaw, outVar] = kernelMathScalar;
+    const [, op, typePrefix, bits, leftRaw, rightRaw, outVar] = kernelMathScalar;
     const leftVar = leftRaw.startsWith('@') ? leftRaw.slice(1) : leftRaw;
     const rightVar = rightRaw.startsWith('@') ? rightRaw.slice(1) : rightRaw;
-    gpuState.currentKernel.ops.push({ kind: 'math_scalar', op, scalarType: 'In32', leftVar, rightVar, outVar });
-    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=${op.toLowerCase()}_scalar type=In32 left=${leftVar} right=${rightVar} out=${outVar}`);
+    const scalarType = `${typePrefix}${bits}`;
+    gpuState.currentKernel.ops.push({ kind: 'math_scalar', op, scalarType, leftVar, rightVar, outVar });
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=${op.toLowerCase()}_scalar type=${scalarType} left=${leftVar} right=${rightVar} out=${outVar}`);
+    return true;
+  }
+
+  const kernelSinFl32 = line.match(/^GpuMathSinFl32x(@?[A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (kernelSinFl32) {
+    const [, inRaw, outVar] = kernelSinFl32;
+    const inVar = inRaw.startsWith('@') ? inRaw.slice(1) : inRaw;
+    gpuState.currentKernel.ops.push({ kind: 'sin_scalar', scalarType: 'Fl32', inVar, outVar });
+    emitInstruction(`; TOM_GPU_KERNEL_OP kernel=${gpuState.currentKernel.name} op=sin_scalar type=Fl32 in=${inVar} out=${outVar}`);
     return true;
   }
 
@@ -1287,6 +1359,9 @@ if (hasSqrtf) {
 if (hasSqrt) {
   output.push('declare double @llvm.sqrt.f64(double)');
 }
+if (hasSinf) {
+  output.push('declare float @llvm.sin.f32(float)');
+}
 if (hasExit) {
   output.push('declare void @exit(i32)');
 }
@@ -1295,6 +1370,9 @@ if (hasTomGpuPresent) {
 }
 if (hasTomGpuReadInput) {
   output.push('declare void @TomGpu_LerInput(i32*)');
+}
+if (hasTomGpuQueueAudio) {
+  output.push('declare void @TomGpu_EnfileirarAudio(float*, i32)');
 }
 if (budgetState.runtimeInstrumentation || budgetState.systems.length > 0) {
   output.push('declare i64 @llvm.readcyclecounter()');

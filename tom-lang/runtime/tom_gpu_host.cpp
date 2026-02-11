@@ -46,6 +46,11 @@ std::mutex g_inputMutex;
 SDL_Window* g_window = nullptr;
 SDL_Renderer* g_renderer = nullptr;
 SDL_Texture* g_texture = nullptr;
+SDL_AudioDeviceID g_audioDevice = 0;
+SDL_AudioSpec g_audioSpec{};
+constexpr int kAudioSampleRate = 44100;
+constexpr int kAudioChannels = 1;
+constexpr uint32_t kAudioMaxQueueBytes = static_cast<uint32_t>(kAudioSampleRate * kAudioChannels * sizeof(float));
 
 void ensureTexture(int width, int height) {
   if (g_texture != nullptr) {
@@ -102,6 +107,23 @@ extern "C" void TomGpu_LerInput(int32_t* buffer_destino) {
   buffer_destino[10] = g_inputState.keyRight;
 }
 
+extern "C" void TomGpu_EnfileirarAudio(float* samples, int count) {
+  if (g_audioDevice == 0 || samples == nullptr || count <= 0) {
+    return;
+  }
+
+  const uint32_t queuedBytes = SDL_GetQueuedAudioSize(g_audioDevice);
+  if (queuedBytes > kAudioMaxQueueBytes) {
+    SDL_ClearQueuedAudio(g_audioDevice);
+  }
+
+  const uint32_t payloadBytes = static_cast<uint32_t>(count) * static_cast<uint32_t>(sizeof(float));
+  if (SDL_QueueAudio(g_audioDevice, samples, payloadBytes) != 0) {
+    std::cerr << "Falha ao enfileirar audio: " << SDL_GetError() << std::endl;
+  }
+}
+
+
 namespace {
 using TomModuleHandle =
 #ifdef _WIN32
@@ -151,13 +173,27 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
     std::cerr << "Falha ao iniciar SDL2: " << SDL_GetError() << std::endl;
     return 1;
   }
 
   g_window = SDL_CreateWindow("TomGPU Raster", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 640, 480, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
   g_renderer = SDL_CreateRenderer(g_window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+
+  SDL_AudioSpec desiredAudio{};
+  desiredAudio.freq = kAudioSampleRate;
+  desiredAudio.format = AUDIO_F32SYS;
+  desiredAudio.channels = static_cast<Uint8>(kAudioChannels);
+  desiredAudio.samples = 1024;
+  desiredAudio.callback = nullptr;
+
+  g_audioDevice = SDL_OpenAudioDevice(nullptr, 0, &desiredAudio, &g_audioSpec, 0);
+  if (g_audioDevice == 0) {
+    std::cerr << "Falha ao abrir dispositivo de audio: " << SDL_GetError() << std::endl;
+  } else {
+    SDL_PauseAudioDevice(g_audioDevice, 0);
+  }
 
   TomModuleHandle handle = openTomModule(argv[1]);
   if (!handle) {
@@ -239,6 +275,12 @@ int main(int argc, char** argv) {
     } else {
       SDL_Delay(16);
     }
+  }
+
+  if (g_audioDevice != 0) {
+    SDL_ClearQueuedAudio(g_audioDevice);
+    SDL_CloseAudioDevice(g_audioDevice);
+    g_audioDevice = 0;
   }
 
   if (g_texture) SDL_DestroyTexture(g_texture);
