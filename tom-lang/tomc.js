@@ -16,6 +16,12 @@ const rawLines = sourceCode
 let lines = rawLines;
 
 const SUPPORTED_TARGET_DECORATORS = new Set(['cpu', 'gpu', 'auto']);
+class ErroCompilacao extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ErroCompilacao';
+  }
+}
 
 function parseTomType(typeRaw) {
   const text = String(typeRaw || '').trim();
@@ -129,13 +135,19 @@ function parseAgnosticInstruction(line) {
 function parseFunctionAst(programLines) {
   const ast = [];
   const passthroughLines = [];
-  let pendingTargetDecorator = null;
+  const pendingDecorators = [];
   let currentFunction = null;
 
   for (const line of programLines) {
-    const decorator = line.match(/^@(cpu|gpu|auto)$/);
-    if (decorator) {
-      pendingTargetDecorator = decorator[1];
+    const targetDecorator = line.match(/^@(cpu|gpu|auto)$/);
+    if (targetDecorator) {
+      pendingDecorators.push({ kind: 'target', value: targetDecorator[1], raw: `@${targetDecorator[1]}` });
+      continue;
+    }
+
+    const wcetDecorator = line.match(/^@garantia\(\s*ciclos\s*:\s*(\d+)\s*\)$/);
+    if (wcetDecorator) {
+      pendingDecorators.push({ kind: 'garantia', cycles: Number.parseInt(wcetDecorator[1], 10), raw: line });
       continue;
     }
 
@@ -146,11 +158,15 @@ function parseFunctionAst(programLines) {
         kind: 'DefFuncao',
         name,
         params: parseFunctionParams(paramsRaw),
-        decorators: pendingTargetDecorator ? [`@${pendingTargetDecorator}`] : [],
-        target: pendingTargetDecorator || 'auto',
+        decorators: pendingDecorators.map((decorator) => decorator.raw),
+        target: (pendingDecorators.find((decorator) => decorator.kind === 'target') || { value: 'auto' }).value,
+        garantia: (() => {
+          const garantiaDecorator = pendingDecorators.find((decorator) => decorator.kind === 'garantia');
+          return garantiaDecorator ? garantiaDecorator.cycles : null;
+        })(),
         body: [],
       };
-      pendingTargetDecorator = null;
+      pendingDecorators.length = 0;
       ast.push(currentFunction);
       continue;
     }
@@ -184,6 +200,7 @@ function lowerAstToTomIr(functionAst) {
         name: param.name,
         type: { ...param.type },
       })),
+      garantia: fnNode.garantia,
       shape: fnNode.params.map((param) => ({
         param: param.name,
         type: param.type.kind,
@@ -289,8 +306,178 @@ function checkGpuEligibility(funcAST) {
   };
 }
 
+function inferInstructionCost(rawLine) {
+  const WCET_COSTS = {
+    opAddSubMulDiv: 3,
+    opLoad: 4,
+    opStore: 4,
+    opRaw: 1,
+    conditionBase: 1,
+    compare: 1,
+    arithmetic: 1,
+    unknownInstruction: 1,
+  };
+  const lowered = parseAgnosticInstruction(rawLine);
+  if (lowered.op === 'OpAddSubMulDiv') return WCET_COSTS.opAddSubMulDiv;
+  if (lowered.op === 'OpLoad') return WCET_COSTS.opLoad;
+  if (lowered.op === 'OpStore') return WCET_COSTS.opStore;
+  if (lowered.op === 'OpRaw') return WCET_COSTS.opRaw;
+  if (lowered.op) {
+    return WCET_COSTS.unknownInstruction;
+  }
+  return WCET_COSTS.unknownInstruction;
+}
+
+function estimateConditionCost(conditionRaw) {
+  const WCET_COSTS = {
+    conditionBase: 1,
+    compare: 1,
+    arithmetic: 1,
+  };
+  const condition = String(conditionRaw || '').trim();
+  if (!condition) return WCET_COSTS.conditionBase;
+
+  const compareOps = condition.match(/(<=|>=|==|!=|<|>)/g) || [];
+  const arithmeticOps = condition.match(/[+\-*/]/g) || [];
+  return WCET_COSTS.conditionBase + (compareOps.length * WCET_COSTS.compare) + (arithmeticOps.length * WCET_COSTS.arithmetic);
+}
+
+function readLoopBound(loopHeader) {
+  const inlineBound = loopHeader.match(/(?:iteracoes|max|unroll)\s*[=:]\s*(\d+)/i);
+  if (inlineBound) return Number.parseInt(inlineBound[1], 10);
+
+  const paraRange = loopHeader.match(/^Para\s+[A-Za-z_][A-Za-z0-9_]*\s+de\s+(-?\d+)\s+ate\s+(-?\d+)/);
+  if (paraRange) {
+    const start = Number.parseInt(paraRange[1], 10);
+    const end = Number.parseInt(paraRange[2], 10);
+    return Math.max(0, end - start);
+  }
+
+  const paraCadaBound = loopHeader.match(/^ParaCada\b.*\b(\d+)\s*(?:iteracoes|it|vezes)?$/i);
+  if (paraCadaBound) return Number.parseInt(paraCadaBound[1], 10);
+
+  return null;
+}
+
+function extractConditionFromHeader(line, keyword) {
+  return String(line || '').replace(new RegExp(`^${keyword}\\s+`, 'i'), '').trim();
+}
+
+function parseStructuredBlock(lines, startIndex, endTokens, fnName) {
+  const statements = [];
+  let index = startIndex;
+
+  while (index < lines.length) {
+    const line = String(lines[index] || '').trim();
+    if (!line) {
+      index += 1;
+      continue;
+    }
+
+    if (endTokens.includes(line)) {
+      return { statements, nextIndex: index, terminator: line };
+    }
+
+    if (/^(Se|If)\b/.test(line)) {
+      const conditionCost = estimateConditionCost(extractConditionFromHeader(line, /^(Se|If)/.exec(line)[1]));
+      const trueBranch = parseStructuredBlock(lines, index + 1, ['Senao', 'Else', 'FimSe', 'EndIf'], fnName);
+      let falseStatements = [];
+      let exitIndex = trueBranch.nextIndex;
+
+      if (trueBranch.terminator === 'Senao' || trueBranch.terminator === 'Else') {
+        const falseBranch = parseStructuredBlock(lines, trueBranch.nextIndex + 1, ['FimSe', 'EndIf'], fnName);
+        falseStatements = falseBranch.statements;
+        exitIndex = falseBranch.nextIndex;
+        if (!(falseBranch.terminator === 'FimSe' || falseBranch.terminator === 'EndIf')) {
+          throw new ErroCompilacao(`Bloco condicional sem fechamento em '${fnName}' próximo de '${line}'.`);
+        }
+      } else if (!(trueBranch.terminator === 'FimSe' || trueBranch.terminator === 'EndIf')) {
+        throw new ErroCompilacao(`Bloco condicional sem FimSe em '${fnName}' próximo de '${line}'.`);
+      }
+
+      statements.push({
+        kind: 'if',
+        source: line,
+        conditionCost,
+        trueBranch: trueBranch.statements,
+        falseBranch: falseStatements,
+      });
+      index = exitIndex + 1;
+      continue;
+    }
+
+    const loopType = /^(ParaCada|Para)\b/.test(line)
+      ? 'for'
+      : /^(Enquanto|While)\b/.test(line)
+        ? 'while'
+        : null;
+
+    if (loopType) {
+      const loopBlock = parseStructuredBlock(lines, index + 1, ['FimPara', 'FimParaCada', 'FimEnquanto', 'EndWhile'], fnName);
+      const iterations = readLoopBound(line);
+      if (!Number.isInteger(iterations) || iterations < 0) {
+        throw new ErroCompilacao(`Loop '${line}' em '${fnName}' precisa de limite constante (ex.: iteracoes=10) para @garantia.`);
+      }
+
+      statements.push({
+        kind: 'loop',
+        source: line,
+        loopType,
+        iterations,
+        conditionCost: loopType === 'while' ? estimateConditionCost(extractConditionFromHeader(line, /^(Enquanto|While)/.exec(line)[1])) : 0,
+        body: loopBlock.statements,
+      });
+      index = loopBlock.nextIndex + 1;
+      continue;
+    }
+
+    statements.push({ kind: 'instruction', source: line, cost: inferInstructionCost(line) });
+    index += 1;
+  }
+
+  return { statements, nextIndex: index, terminator: null };
+}
+
+function computeWorstCaseCost(statements) {
+  let total = 0;
+  for (const statement of statements) {
+    if (statement.kind === 'instruction') {
+      total += statement.cost;
+      continue;
+    }
+
+    if (statement.kind === 'if') {
+      const trueCost = computeWorstCaseCost(statement.trueBranch);
+      const falseCost = computeWorstCaseCost(statement.falseBranch);
+      total += statement.conditionCost + Math.max(trueCost, falseCost);
+      continue;
+    }
+
+    if (statement.kind === 'loop') {
+      const bodyCost = computeWorstCaseCost(statement.body);
+      total += statement.iterations * (statement.conditionCost + bodyCost);
+    }
+  }
+  return total;
+}
+
+function verificarGarantiaWCET(functionsAst) {
+  for (const fnNode of functionsAst) {
+    if (!Number.isInteger(fnNode.garantia)) continue;
+
+    const structured = parseStructuredBlock(fnNode.body, 0, [], fnNode.name);
+    const cost = computeWorstCaseCost(structured.statements);
+    if (cost > fnNode.garantia) {
+      throw new ErroCompilacao(
+        `Violação de Orçamento Estático em @garantia da função '${fnNode.name}': custo WCET=${cost} ciclos > limite=${fnNode.garantia}.`,
+      );
+    }
+  }
+}
+
 const parsedFunctions = parseFunctionAst(rawLines);
 const functionAst = parsedFunctions.ast;
+verificarGarantiaWCET(functionAst);
 const tomIrFunctions = lowerAstToTomIr(functionAst);
 let pendingGpuEligibilityFatalError = null;
 for (const func of tomIrFunctions) {
