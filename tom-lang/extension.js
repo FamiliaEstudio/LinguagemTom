@@ -3,6 +3,9 @@ const vscode = require('vscode');
 const frameRegex = /^DefBudgetFramexyTargetFPSy(\d+)$/;
 const systemRegex = /^DefBudgetSistemax([A-Za-z_][A-Za-z0-9_]*)yMaxMsy(-?\d+(?:\.\d+)?)$/;
 const priorityRegex = /^DefPrioridadex([A-Za-z_][A-Za-z0-9_]*)y(-?\d+)$/;
+const cpuLaneRegex = /^(Somar|Subtr|Multi|Divid|SeMaior|SetVar|DefVar|Escopo).*/;
+const gpuLaneRegex = /^(GpuDisp|DefKernel|GpuIdObt|GpuLer|GpuEscr|FimDef).*/;
+const transferLaneRegex = /^(GpuEnv|GpuRec|GpuBufCriar|GpuApresentar).*/;
 
 const scopeStartRegex = /^EscopoInix([A-Za-z_][A-Za-z0-9_]*)$/;
 const scopeEndRegex = /^EscopoFimx([A-Za-z_][A-Za-z0-9_]*)$/;
@@ -28,6 +31,62 @@ function activate(context) {
     overviewRulerColor: new vscode.ThemeColor('charts.green'),
     overviewRulerLane: vscode.OverviewRulerLane.Right,
   });
+  const cpuLaneDecoration = vscode.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    backgroundColor: 'rgba(65, 105, 225, 0.05)',
+  });
+  const gpuLaneDecoration = vscode.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    backgroundColor: 'rgba(50, 205, 50, 0.05)',
+  });
+  const transferLaneDecoration = vscode.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    backgroundColor: 'rgba(255, 165, 0, 0.1)',
+  });
+
+  const updateLanes = (editor) => {
+    if (!editor || editor.document.languageId !== 'tom') return;
+
+    const cpuRanges = [];
+    const gpuRanges = [];
+    const transferRanges = [];
+
+    for (let index = 0; index < editor.document.lineCount; index += 1) {
+      const line = editor.document.lineAt(index);
+      const text = line.text.trim();
+      if (!text) continue;
+
+      if (transferLaneRegex.test(text)) {
+        transferRanges.push(line.range);
+        continue;
+      }
+
+      if (gpuLaneRegex.test(text)) {
+        gpuRanges.push(line.range);
+        continue;
+      }
+
+      if (cpuLaneRegex.test(text)) {
+        cpuRanges.push(line.range);
+      }
+    }
+
+    editor.setDecorations(cpuLaneDecoration, cpuRanges);
+    editor.setDecorations(gpuLaneDecoration, gpuRanges);
+    editor.setDecorations(transferLaneDecoration, transferRanges);
+  };
+
+  const updateLanesByDocument = (document) => {
+    if (!document || document.languageId !== 'tom') return;
+
+    const visibleEditors = vscode.window.visibleTextEditors.filter(
+      (editor) => editor.document.uri.toString() === document.uri.toString(),
+    );
+
+    for (const editor of visibleEditors) {
+      updateLanes(editor);
+    }
+  };
 
   const refresh = (document) => {
     if (!document || document.languageId !== 'tom') return;
@@ -189,6 +248,7 @@ function activate(context) {
     for (const editor of vscode.window.visibleTextEditors) {
       if (editor.document.languageId === 'tom') {
         refresh(editor.document);
+        updateLanes(editor);
       }
     }
   };
@@ -196,8 +256,17 @@ function activate(context) {
   context.subscriptions.push(
     diagnostics,
     budgetDecoration,
-    vscode.workspace.onDidOpenTextDocument(refresh),
-    vscode.workspace.onDidChangeTextDocument((event) => refresh(event.document)),
+    cpuLaneDecoration,
+    gpuLaneDecoration,
+    transferLaneDecoration,
+    vscode.workspace.onDidOpenTextDocument((document) => {
+      refresh(document);
+      updateLanesByDocument(document);
+    }),
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      refresh(event.document);
+      updateLanesByDocument(event.document);
+    }),
     vscode.workspace.onDidCloseTextDocument((document) => diagnostics.delete(document.uri)),
     vscode.window.onDidChangeVisibleTextEditors(refreshVisibleTomEditors),
   );
