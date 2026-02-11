@@ -4,8 +4,9 @@ const frameRegex = /^DefBudgetFramexyTargetFPSy(\d+)$/;
 const systemRegex = /^DefBudgetSistemax([A-Za-z_][A-Za-z0-9_]*)yMaxMsy(-?\d+(?:\.\d+)?)$/;
 const priorityRegex = /^DefPrioridadex([A-Za-z_][A-Za-z0-9_]*)y(-?\d+)$/;
 const cpuLaneRegex = /^(Somar|Subtr|Multi|Divid|SeMaior|SetVar|DefVar|Escopo).*/;
-const gpuLaneRegex = /^(GpuDisp|DefKernel|GpuIdObt|GpuLer|GpuEscr|FimDef).*/;
+const gpuLaneRegex = /^(GpuDispAsync|GpuDisp|DefKernel|GpuIdObt|GpuLer|GpuEscr|FimDef).*/;
 const transferLaneRegex = /^(GpuEnv|GpuRec|GpuBufCriar|GpuApresentar).*/;
+const fenceRegex = /^(GpuFence|AguardarGpu)$/;
 
 const scopeStartRegex = /^EscopoInix([A-Za-z_][A-Za-z0-9_]*)$/;
 const scopeEndRegex = /^EscopoFimx([A-Za-z_][A-Za-z0-9_]*)$/;
@@ -43,6 +44,12 @@ function activate(context) {
     isWholeLine: true,
     backgroundColor: 'rgba(255, 165, 0, 0.1)',
   });
+  const fenceDecoration = vscode.window.createTextEditorDecorationType({
+    isWholeLine: true,
+    borderWidth: '0 0 2px 0',
+    borderStyle: 'solid',
+    borderColor: '#FF0000',
+  });
 
   const updateLanes = (editor) => {
     if (!editor || editor.document.languageId !== 'tom') return;
@@ -50,11 +57,17 @@ function activate(context) {
     const cpuRanges = [];
     const gpuRanges = [];
     const transferRanges = [];
+    const fenceRanges = [];
 
     for (let index = 0; index < editor.document.lineCount; index += 1) {
       const line = editor.document.lineAt(index);
       const text = line.text.trim();
       if (!text) continue;
+
+      if (fenceRegex.test(text)) {
+        fenceRanges.push(line.range);
+        continue;
+      }
 
       if (transferLaneRegex.test(text)) {
         transferRanges.push(line.range);
@@ -74,6 +87,7 @@ function activate(context) {
     editor.setDecorations(cpuLaneDecoration, cpuRanges);
     editor.setDecorations(gpuLaneDecoration, gpuRanges);
     editor.setDecorations(transferLaneDecoration, transferRanges);
+    editor.setDecorations(fenceDecoration, fenceRanges);
   };
 
   const updateLanesByDocument = (document) => {
@@ -259,6 +273,7 @@ function activate(context) {
     cpuLaneDecoration,
     gpuLaneDecoration,
     transferLaneDecoration,
+    fenceDecoration,
     vscode.workspace.onDidOpenTextDocument((document) => {
       refresh(document);
       updateLanesByDocument(document);
