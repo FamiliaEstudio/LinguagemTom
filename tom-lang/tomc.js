@@ -1108,6 +1108,157 @@ function scalarToGlslType(scalarType) {
   return null;
 }
 
+function emitGlslFromTir(funcTIR) {
+  const functionName = funcTIR?.metadata?.name || 'TomKernel';
+  const params = Array.isArray(funcTIR?.metadata?.params) ? funcTIR.metadata.params : [];
+  const instructions = Array.isArray(funcTIR?.instructions) ? funcTIR.instructions : [];
+  const glsl = ['#version 460', ''];
+  const unsupported = [];
+  const scalarParamTypes = new Map();
+  const localSize = { x: 64, y: 1, z: 1 };
+
+  glsl.push(`layout(local_size_x = ${localSize.x}, local_size_y = ${localSize.y}, local_size_z = ${localSize.z}) in;`);
+
+  let binding = 0;
+  let hasBuffer = false;
+  for (const param of params) {
+    if (param?.type?.kind === 'buffer') {
+      const glslType = scalarToGlslType(param.type.elementType);
+      if (!glslType) {
+        unsupported.push(`Parâmetro '${param.name}' usa tipo sem mapeamento GLSL: ${param.type.elementType}.`);
+        continue;
+      }
+      hasBuffer = true;
+      glsl.push(`layout(std430, binding = ${binding}) buffer Buffer${param.name} { ${glslType} data[]; } ${param.name};`);
+      binding += 1;
+      continue;
+    }
+
+    const glslType = scalarToGlslType(param?.type?.name);
+    if (glslType) {
+      scalarParamTypes.set(param.name, glslType);
+    }
+  }
+
+  if (hasBuffer) glsl.push('');
+
+  if (scalarParamTypes.size) {
+    glsl.push(`layout(push_constant) uniform ${functionName}PushConstants {`);
+    for (const [name, glslType] of scalarParamTypes.entries()) {
+      glsl.push(`  ${glslType} ${name};`);
+    }
+    glsl.push('} pc;');
+    glsl.push('');
+  }
+
+  const loopStartRegex = /^Para\s+([A-Za-z_][A-Za-z0-9_]*)\s+de\s+([^\s]+)\s+ate\s+([^\s]+)$/;
+  let loopMeta = null;
+  let loopStartIndex = -1;
+  let loopEndIndex = -1;
+
+  for (let i = 0; i < instructions.length; i += 1) {
+    const op = instructions[i];
+    if (op.op !== 'OpRaw') continue;
+    const source = String(op.source || '').trim();
+    const match = source.match(loopStartRegex);
+    if (!match) continue;
+
+    const [, indexVar, start, end] = match;
+    if (start !== '0') {
+      unsupported.push(`Loop principal deve iniciar em 0 para GPU MVP (encontrado '${start}').`);
+      break;
+    }
+
+    let depth = 1;
+    for (let j = i + 1; j < instructions.length; j += 1) {
+      if (instructions[j].op !== 'OpRaw') continue;
+      const bodySource = String(instructions[j].source || '').trim();
+      if (loopStartRegex.test(bodySource)) depth += 1;
+      if (bodySource === 'FimPara') {
+        depth -= 1;
+        if (depth === 0) {
+          loopMeta = { indexVar, endExpr: end };
+          loopStartIndex = i;
+          loopEndIndex = j;
+          break;
+        }
+      }
+    }
+    break;
+  }
+
+  glsl.push('void main() {');
+  if (!loopMeta) {
+    glsl.push('  // Nenhum loop Para elegível para transpilação GPU foi encontrado na TIR.');
+    glsl.push('}');
+    return {
+      source: glsl.join('\n'),
+      unsupported,
+      bufferBindings: params
+        .filter((param) => param?.type?.kind === 'buffer')
+        .map((param, index) => ({
+          name: param.name,
+          binding: index,
+          scalarType: param.type.elementType,
+          glslType: scalarToGlslType(param.type.elementType),
+        })),
+      pushConstants: Array.from(scalarParamTypes.entries()).map(([name, glslType]) => ({ name, glslType })),
+      localSize,
+    };
+  }
+
+  glsl.push(`  uint ${loopMeta.indexVar} = gl_GlobalInvocationID.x;`);
+  const guardExpr = scalarParamTypes.has(loopMeta.endExpr) ? `pc.${loopMeta.endExpr}` : loopMeta.endExpr;
+  glsl.push(`  if (${loopMeta.indexVar} >= uint(${guardExpr})) return;`);
+
+  const indexedReadRegex = /([A-Za-z_][A-Za-z0-9_]*)\s*\[\s*([^\]]+)\s*\]/g;
+  for (let i = loopStartIndex + 1; i < loopEndIndex; i += 1) {
+    const op = instructions[i];
+    if (op.op !== 'OpRaw') {
+      unsupported.push(`Instrução '${op.op}' ainda não suportada no emitter GLSL de TIR.`);
+      continue;
+    }
+
+    const source = String(op.source || '').trim();
+    if (!source || source === 'FimPara') continue;
+
+    const assign = source.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*\[\s*([^\]]+)\s*\]\s*=\s*(.+)$/);
+    if (!assign) {
+      unsupported.push(`Linha de loop não suportada para transpilação GLSL: '${source}'.`);
+      continue;
+    }
+
+    const [, outBuffer, outIndexRaw, rhsRaw] = assign;
+    const outIndex = outIndexRaw.trim();
+    const rhsExpr = rhsRaw.replace(indexedReadRegex, (full, bufferName, indexExprRaw) => {
+      const indexExpr = indexExprRaw.trim();
+      if (indexExpr === loopMeta.indexVar) {
+        return `${bufferName}.data[${loopMeta.indexVar}]`;
+      }
+      return `${bufferName}.data[uint(${indexExpr})]`;
+    });
+
+    const outputIndexExpr = outIndex === loopMeta.indexVar ? loopMeta.indexVar : `uint(${outIndex})`;
+    glsl.push(`  ${outBuffer}.data[${outputIndexExpr}] = ${rhsExpr};`);
+  }
+
+  glsl.push('}');
+  return {
+    source: glsl.join('\n'),
+    unsupported,
+    bufferBindings: params
+      .filter((param) => param?.type?.kind === 'buffer')
+      .map((param, index) => ({
+        name: param.name,
+        binding: index,
+        scalarType: param.type.elementType,
+        glslType: scalarToGlslType(param.type.elementType),
+      })),
+    pushConstants: Array.from(scalarParamTypes.entries()).map(([name, glslType]) => ({ name, glslType })),
+    localSize,
+  };
+}
+
 function buildGlslKernelSource(kernel, buffersByName) {
   const glsl = [];
   const varTypes = new Map();
@@ -2806,10 +2957,27 @@ if (gpuManifest) {
 }
 
 const tirOutputPath = path.join(path.dirname(inputFile), 'output.tir.json');
+const tirFunctionsWithBackends = tomIrFunctions.map((func) => {
+  const glslCompute = emitGlslFromTir(func);
+  return {
+    ...func,
+    backends: {
+      glsl_compute: {
+        glslVersion: 460,
+        localSize: glslCompute.localSize,
+        bufferBindings: glslCompute.bufferBindings,
+        pushConstants: glslCompute.pushConstants,
+        source: glslCompute.source,
+        unsupported: glslCompute.unsupported,
+      },
+    },
+  };
+});
+
 const tirPayload = {
   version: 1,
   sourceFile: path.basename(inputFile),
-  functions: tomIrFunctions,
+  functions: tirFunctionsWithBackends,
 };
 fs.writeFileSync(tirOutputPath, `${JSON.stringify(tirPayload, null, 2)}\n`);
 
