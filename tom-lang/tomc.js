@@ -1,5 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const {
+  buildParaCadaSoaTomIr,
+  renderTomIrModuleAsMlir,
+} = require('./tom_ir');
 
 const inputFile = process.argv[2] || 'teste.tom';
 const sourceCode = fs.readFileSync(inputFile, 'utf-8');
@@ -467,6 +471,7 @@ let reuseAnalysis = buildReuseAnalysis(lines);
 const irLines = [];
 const mlirState = {
   vec4AddModules: [],
+  paraCadaSoaModules: [],
   nextId: 0,
 };
 const globals = [];
@@ -2210,6 +2215,16 @@ function emitDataOperation(line) {
       return true;
     }
 
+    const paraCadaSoaModule = buildParaCadaSoaTomIr({
+      instanceName,
+      propertyName,
+      count: instance.count,
+      amount,
+      elementType: 'i32',
+    });
+    mlirState.paraCadaSoaModules.push(paraCadaSoaModule);
+    emitInstruction(`; MLIR lowering (ParaCadaSOA affine.for) -> output.mlir [soa ${mlirState.paraCadaSoaModules.length - 1}]`);
+
     const preheaderLabel = controlState.currentBlock;
     const vecCondLabel = nextLabel(`soa_vec4_${instanceName}_${propertyName}_cond`);
     const vecBodyLabel = nextLabel(`soa_vec4_${instanceName}_${propertyName}_body`);
@@ -3237,8 +3252,12 @@ const outputPath = path.join(path.dirname(inputFile), 'output.ll');
 fs.writeFileSync(outputPath, llvmOutput);
 
 const mlirOutputPath = path.join(path.dirname(inputFile), 'output.mlir');
-const mlirOutput = mlirState.vec4AddModules.length
-  ? `${mlirState.vec4AddModules.map((moduleNode) => renderMlirModule(moduleNode)).join('\n\n')}\n`
+const mlirModules = [
+  ...mlirState.vec4AddModules.map((moduleNode) => renderMlirModule(moduleNode)),
+  ...mlirState.paraCadaSoaModules.map((moduleNode) => renderTomIrModuleAsMlir(moduleNode)),
+];
+const mlirOutput = mlirModules.length
+  ? `${mlirModules.join('\n\n')}\n`
   : 'module {\n  // Nenhuma operação Vec4In32 foi promovida para MLIR nesta compilação.\n}\n';
 fs.writeFileSync(mlirOutputPath, mlirOutput);
 
