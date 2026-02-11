@@ -1,11 +1,97 @@
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const {
   buildParaCadaSoaTomIr,
   renderTomIrModuleAsMlir,
 } = require('./tom_ir');
 
-const inputFile = process.argv[2] || 'teste.tom';
+function parseCliArgs(argv) {
+  const options = {
+    emitMlir: false,
+    runMlirOpt: false,
+    mlirOptBin: 'mlir-opt',
+    mlirOptPasses: [
+      '--convert-affine-to-loops',
+      '--convert-scf-to-cf',
+      '--convert-vector-to-llvm',
+      '--convert-func-to-llvm',
+      '--reconcile-unrealized-casts',
+    ],
+  };
+  let inputFile = null;
+
+  for (const arg of argv) {
+    if (arg === '--emit-mlir') {
+      options.emitMlir = true;
+      continue;
+    }
+    if (arg === '--mlir-opt') {
+      options.runMlirOpt = true;
+      continue;
+    }
+    if (arg.startsWith('--mlir-opt-bin=')) {
+      options.runMlirOpt = true;
+      options.mlirOptBin = arg.slice('--mlir-opt-bin='.length) || 'mlir-opt';
+      continue;
+    }
+    if (arg.startsWith('--mlir-opt-passes=')) {
+      options.runMlirOpt = true;
+      const rawPasses = arg.slice('--mlir-opt-passes='.length);
+      options.mlirOptPasses = rawPasses
+        .split(',')
+        .map((pass) => pass.trim())
+        .filter(Boolean)
+        .map((pass) => (pass.startsWith('--') ? pass : `--${pass}`));
+      continue;
+    }
+    if (arg.startsWith('-')) {
+      console.warn(`[tomc] Flag desconhecida ignorada: ${arg}`);
+      continue;
+    }
+
+    if (!inputFile) {
+      inputFile = arg;
+    }
+  }
+
+  return {
+    options,
+    inputFile: inputFile || 'teste.tom',
+  };
+}
+
+function runMlirOptPipeline(inputPath, options) {
+  const optimizedPath = inputPath.replace(/\.mlir$/, '.opt.mlir');
+  const args = [...options.mlirOptPasses, inputPath, '-o', optimizedPath];
+  const result = spawnSync(options.mlirOptBin, args, { encoding: 'utf8' });
+
+  if (result.error) {
+    console.warn(`[tomc] Não foi possível executar '${options.mlirOptBin}': ${result.error.message}`);
+    return null;
+  }
+
+  if (result.status !== 0) {
+    console.warn(`[tomc] '${options.mlirOptBin}' retornou código ${result.status}.`);
+    if (result.stderr) {
+      console.warn(result.stderr.trim());
+    }
+    return null;
+  }
+
+  if (result.stderr && result.stderr.trim()) {
+    console.warn(`[tomc] ${options.mlirOptBin} stderr:\n${result.stderr.trim()}`);
+  }
+
+  return {
+    optimizedPath,
+    stdout: result.stdout || '',
+  };
+}
+
+const cli = parseCliArgs(process.argv.slice(2));
+const inputFile = cli.inputFile;
+const cliOptions = cli.options;
 const sourceCode = fs.readFileSync(inputFile, 'utf-8');
 
 const rawLines = sourceCode
@@ -3771,7 +3857,6 @@ if (hostStubDefinitions.length > 0) {
 
 const llvmOutput = `${output.join('\n')}\n`;
 const outputPath = path.join(path.dirname(inputFile), 'output.ll');
-fs.writeFileSync(outputPath, llvmOutput);
 
 const mlirOutputPath = path.join(path.dirname(inputFile), 'output.mlir');
 const mlirModules = [
@@ -3781,7 +3866,18 @@ const mlirModules = [
 const mlirOutput = mlirModules.length
   ? `${mlirModules.join('\n\n')}\n`
   : 'module {\n  // Nenhuma operação Vec4In32 foi promovida para MLIR nesta compilação.\n}\n';
-fs.writeFileSync(mlirOutputPath, mlirOutput);
+
+if (cliOptions.emitMlir) {
+  fs.writeFileSync(mlirOutputPath, mlirOutput);
+} else {
+  fs.writeFileSync(outputPath, llvmOutput);
+  fs.writeFileSync(mlirOutputPath, mlirOutput);
+}
+
+let mlirOptResult = null;
+if (cliOptions.runMlirOpt) {
+  mlirOptResult = runMlirOptPipeline(mlirOutputPath, cliOptions);
+}
 
 const gpuManifest = buildGpuBackendManifest(inputFile);
 const gpuManifestPath = path.join(path.dirname(inputFile), 'output.gpu.json');
@@ -3821,8 +3917,16 @@ const tirPayload = {
 };
 fs.writeFileSync(tirOutputPath, `${JSON.stringify(tirPayload, null, 2)}\n`);
 
-console.log(`Compilação concluída para '${inputFile}'. Arquivo '${outputPath}' gerado.`);
-console.log(`Saída MLIR gerada em '${mlirOutputPath}'.`);
+if (cliOptions.emitMlir) {
+  console.log(`Compilação concluída para '${inputFile}'. Modo MLIR ativo (--emit-mlir).`);
+  console.log(`Saída MLIR gerada em '${mlirOutputPath}'.`);
+} else {
+  console.log(`Compilação concluída para '${inputFile}'. Arquivo '${outputPath}' gerado.`);
+  console.log(`Saída MLIR gerada em '${mlirOutputPath}'.`);
+}
+if (mlirOptResult) {
+  console.log(`Saída otimizada por ${cliOptions.mlirOptBin} gerada em '${mlirOptResult.optimizedPath}'.`);
+}
 if (gpuManifest) {
   console.log(`Manifesto backend GPU gerado em '${gpuManifestPath}'.`);
 }
@@ -3892,7 +3996,9 @@ if (gpuState.buffers.size || gpuState.kernelOrder.length || gpuState.dispatches.
 if (firstError) {
   console.log(`Aviso: ${firstError}`);
 }
-console.log('\nConteúdo LLVM gerado:\n');
-console.log(llvmOutput);
+if (!cliOptions.emitMlir) {
+  console.log('\nConteúdo LLVM gerado:\n');
+  console.log(llvmOutput);
+}
 console.log('\nConteúdo MLIR gerado:\n');
 console.log(mlirOutput);
