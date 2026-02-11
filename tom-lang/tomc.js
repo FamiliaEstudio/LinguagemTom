@@ -30,6 +30,7 @@ let lastTextLength = 0;
 let firstError = null;
 const buffers = new Map();
 const numericVars = new Map();
+const compileTimeConsts = new Map();
 const textVars = new Map();
 const structDefinitions = new Map();
 const soaVars = new Map();
@@ -243,6 +244,27 @@ function parseNumber(value, llvmType, isFloat) {
   return String(num);
 }
 
+function evaluateCompileTimeExpression(expression, line) {
+  try {
+    const evaluator = new Function(`return (${expression});`);
+    const result = evaluator();
+    if (typeof result !== 'number' || !Number.isFinite(result)) {
+      createError(`CompDefConst inválido: expressão deve resultar em número finito (${line}).`);
+      return null;
+    }
+    return result;
+  } catch (err) {
+    createError(`CompDefConst falhou ao avaliar '${expression}': ${err.message}`);
+    return null;
+  }
+}
+
+function resolveCompileTimeConstValue(name, llvmType, isFloat) {
+  if (!compileTimeConsts.has(name)) return null;
+  const rawValue = compileTimeConsts.get(name);
+  return parseNumber(String(rawValue), llvmType, isFloat);
+}
+
 function parseSoaPropertyAccess(raw) {
   const match = raw.match(/^([A-Za-z_][A-Za-z0-9_]*)@(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+)\.([A-Za-z_][A-Za-z0-9_]*)$/);
   if (!match) return null;
@@ -343,6 +365,11 @@ function resolveNumericOperand(raw, llvmType, isFloat) {
     }
 
     const variable = numericVars.get(name);
+    const compileTimeValue = resolveCompileTimeConstValue(name, llvmType, isFloat);
+    if (compileTimeValue !== null) {
+      return { value: compileTimeValue };
+    }
+
     if (!variable) {
       return { error: `Variável numérica '${name}' não foi definida.` };
     }
@@ -368,7 +395,11 @@ function parseDeclarationValue(raw, llvmType, isFloat) {
   if (parsed !== null) return parsed;
 
   if (!raw.startsWith('@')) return null;
-  const source = numericVars.get(raw.slice(1));
+  const sourceName = raw.slice(1);
+  const constValue = resolveCompileTimeConstValue(sourceName, llvmType, isFloat);
+  if (constValue !== null) return constValue;
+
+  const source = numericVars.get(sourceName);
   if (!source || source.llvmType !== llvmType) return null;
 
   const reg = nextReg();
@@ -934,6 +965,23 @@ function emitControlFlow(line) {
 }
 
 function emitDataOperation(line) {
+  const defConst = line.match(/^CompDefConstx([A-Za-z_][A-Za-z0-9_]*)y(.+)$/);
+  if (defConst) {
+    const [, name, expression] = defConst;
+    if (compileTimeConsts.has(name) || numericVars.has(name)) {
+      createError(`CompDefConst duplicado para '${name}'.`);
+      return true;
+    }
+
+    const value = evaluateCompileTimeExpression(expression, line);
+    if (value === null) {
+      return true;
+    }
+
+    compileTimeConsts.set(name, value);
+    return true;
+  }
+
   const allocSoa = line.match(/^AlocSOAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)xy(\d+)$/)
     || line.match(/^AlocSOAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)x(\d+)$/);
   if (allocSoa) {
