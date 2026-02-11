@@ -1,5 +1,10 @@
 #include <SDL2/SDL.h>
+
+#ifdef TOM_GPU_USE_GLAD
+#include <glad/glad.h>
+#else
 #include <GL/glew.h>
+#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -657,6 +662,15 @@ int main(int argc, char** argv) {
 
   SDL_GL_SetSwapInterval(1);
 
+#ifdef TOM_GPU_USE_GLAD
+  if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(SDL_GL_GetProcAddress))) {
+    std::cerr << "Falha ao iniciar loader OpenGL via GLAD." << std::endl;
+    SDL_GL_DeleteContext(g_glContext);
+    SDL_DestroyWindow(g_window);
+    SDL_Quit();
+    return 1;
+  }
+#else
   glewExperimental = GL_TRUE;
   const GLenum glewErr = glewInit();
   if (glewErr != GLEW_OK) {
@@ -666,6 +680,7 @@ int main(int argc, char** argv) {
     SDL_Quit();
     return 1;
   }
+#endif
 
   std::cout << "OpenGL inicializado: " << glGetString(GL_VERSION) << std::endl;
 
