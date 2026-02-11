@@ -13,11 +13,48 @@ class TomIrModule extends TomIrNode {
 }
 
 class TomIrFunction extends TomIrNode {
-  constructor({ name, args = [], body = [] }) {
+  constructor({ name, args = [], returnType = null, body = [] }) {
     super('TomIR.Function');
     this.name = name;
     this.args = args;
+    this.returnType = returnType;
     this.body = body;
+  }
+}
+
+class TomIrLocalVar extends TomIrNode {
+  constructor({ name, type, initialValue = null }) {
+    super('TomIR.LocalVar');
+    this.name = name;
+    this.type = type;
+    this.initialValue = initialValue;
+  }
+}
+
+class TomIrAssign extends TomIrNode {
+  constructor({ target, value, type = null }) {
+    super('TomIR.Assign');
+    this.target = target;
+    this.value = value;
+    this.type = type;
+  }
+}
+
+class TomIrBinaryOp extends TomIrNode {
+  constructor({ op, left, right, type = null }) {
+    super('TomIR.BinaryOp');
+    this.op = op;
+    this.left = left;
+    this.right = right;
+    this.type = type;
+  }
+}
+
+class TomIrReturn extends TomIrNode {
+  constructor({ value = null, type = null }) {
+    super('TomIR.Return');
+    this.value = value;
+    this.type = type;
   }
 }
 
@@ -75,6 +112,33 @@ function buildParaCadaSoaTomIr({ instanceName, propertyName, count, amount, elem
   });
 }
 
+function buildSimpleSumTomIr() {
+  return new TomIrModule({
+    name: 'soma',
+    functions: [
+      new TomIrFunction({
+        name: 'Soma',
+        args: [
+          { name: '%a', type: 'In32' },
+          { name: '%b', type: 'In32' },
+        ],
+        returnType: 'In32',
+        body: [
+          new TomIrReturn({
+            value: new TomIrBinaryOp({
+              op: '+',
+              left: 'a',
+              right: 'b',
+              type: 'In32',
+            }),
+            type: 'In32',
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
 const {
   renderTomIrModuleAsMlir,
 } = require('./tom_to_mlir');
@@ -84,6 +148,11 @@ module.exports = {
   TomIrFunction,
   TomIrAffineFor,
   TomIrSoaAddScalar,
+  TomIrLocalVar,
+  TomIrAssign,
+  TomIrBinaryOp,
+  TomIrReturn,
   buildParaCadaSoaTomIr,
+  buildSimpleSumTomIr,
   renderTomIrModuleAsMlir,
 };
