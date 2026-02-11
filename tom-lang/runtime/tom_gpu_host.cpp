@@ -87,6 +87,12 @@ struct PresentCommand {
   int height = 0;
 };
 
+struct BudgetSample {
+  std::string name;
+  int64_t costCycles = 0;
+  double costMs = 0.0;
+};
+
 SDL_Window* g_window = nullptr;
 SDL_GLContext g_glContext = nullptr;
 SDL_AudioDeviceID g_audioDevice = 0;
@@ -106,6 +112,10 @@ std::optional<PresentCommand> g_pendingPresent;
 
 std::unordered_map<std::string, GpuBuffer> g_gpuBuffers;
 std::unordered_map<std::string, KernelProgram> g_kernelPrograms;
+
+std::mutex g_budgetMutex;
+std::vector<BudgetSample> g_budgetSamples;
+std::unordered_map<std::string, size_t> g_budgetSampleIndex;
 
 GLuint g_presentTexture = 0;
 GLuint g_presentProgram = 0;
@@ -428,6 +438,49 @@ void renderBufferToScreen(const PresentCommand& cmd) {
   glBindVertexArray(g_presentVao);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
+  std::vector<BudgetSample> budgetSnapshot;
+  {
+    std::lock_guard<std::mutex> lock(g_budgetMutex);
+    budgetSnapshot = g_budgetSamples;
+  }
+
+  if (!budgetSnapshot.empty()) {
+    constexpr double kFrameBudgetMs = 16.0;
+    const int overlayMargin = 12;
+    const int barHeight = 14;
+    const int barGap = 6;
+    const int maxBarWidth = 280;
+    const int barWidth = std::max(80, std::min(maxBarWidth, w - (overlayMargin * 2)));
+    const int barX = overlayMargin;
+
+    glEnable(GL_SCISSOR_TEST);
+    for (size_t i = 0; i < budgetSnapshot.size(); ++i) {
+      const int yFromTop = overlayMargin + static_cast<int>(i) * (barHeight + barGap);
+      if (yFromTop + barHeight > h) {
+        break;
+      }
+      const int barY = h - yFromTop - barHeight;
+
+      glScissor(barX, barY, barWidth, barHeight);
+      glClearColor(0.14f, 0.14f, 0.14f, 0.8f);
+      glClear(GL_COLOR_BUFFER_BIT);
+
+      const double ratio = budgetSnapshot[i].costMs / kFrameBudgetMs;
+      const int filledWidth = std::max(0, std::min(barWidth, static_cast<int>(barWidth * std::min(ratio, 1.0))));
+      if (filledWidth > 0) {
+        const bool overBudget = budgetSnapshot[i].costMs > kFrameBudgetMs;
+        glScissor(barX, barY, filledWidth, barHeight);
+        if (overBudget) {
+          glClearColor(0.86f, 0.20f, 0.22f, 1.0f);
+        } else {
+          glClearColor(0.18f, 0.74f, 0.30f, 1.0f);
+        }
+        glClear(GL_COLOR_BUFFER_BIT);
+      }
+    }
+    glDisable(GL_SCISSOR_TEST);
+  }
+
   SDL_GL_SwapWindow(g_window);
 }
 
@@ -625,7 +678,22 @@ extern "C" void TomGpu_EnfileirarAudio(float* samples, int count) {
 }
 
 extern "C" void TomBudgetManager_Report(char* name, int64_t cost) {
-  // Stub para satisfazer o linker no Windows
+  const std::string systemName = (name != nullptr && name[0] != '\0') ? std::string(name) : std::string("<anon>");
+  const double frequency = static_cast<double>(SDL_GetPerformanceFrequency());
+  const double costMs = frequency > 0.0 ? (static_cast<double>(cost) * 1000.0) / frequency : 0.0;
+
+  std::lock_guard<std::mutex> lock(g_budgetMutex);
+  auto it = g_budgetSampleIndex.find(systemName);
+  if (it == g_budgetSampleIndex.end()) {
+    const size_t index = g_budgetSamples.size();
+    g_budgetSamples.push_back(BudgetSample{systemName, cost, costMs});
+    g_budgetSampleIndex.emplace(systemName, index);
+    return;
+  }
+
+  BudgetSample& sample = g_budgetSamples[it->second];
+  sample.costCycles = cost;
+  sample.costMs = costMs;
 }
 
 int main(int argc, char** argv) {
