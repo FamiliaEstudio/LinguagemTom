@@ -8,13 +8,18 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 namespace {
 struct FrameState {
@@ -42,6 +47,14 @@ struct InputState {
 
 InputState g_inputState;
 std::mutex g_inputMutex;
+
+struct TimeState {
+  float deltaSeconds = 0.0f;
+  float totalSeconds = 0.0f;
+};
+
+TimeState g_timeState;
+std::mutex g_timeMutex;
 
 SDL_Window* g_window = nullptr;
 SDL_Renderer* g_renderer = nullptr;
@@ -105,6 +118,61 @@ extern "C" void TomGpu_LerInput(int32_t* buffer_destino) {
   buffer_destino[8] = g_inputState.keyDown;
   buffer_destino[9] = g_inputState.keyLeft;
   buffer_destino[10] = g_inputState.keyRight;
+}
+
+extern "C" void TomGpu_AtualizarTempo(float dt, float tempo_total) {
+  std::lock_guard<std::mutex> lock(g_timeMutex);
+  g_timeState.deltaSeconds = dt;
+  g_timeState.totalSeconds = tempo_total;
+}
+
+extern "C" float TomGpu_ObterDeltaTempo() {
+  std::lock_guard<std::mutex> lock(g_timeMutex);
+  return g_timeState.deltaSeconds;
+}
+
+extern "C" float TomGpu_ObterTempoTotal() {
+  std::lock_guard<std::mutex> lock(g_timeMutex);
+  return g_timeState.totalSeconds;
+}
+
+extern "C" void TomGpu_CarregarImagem(char* caminho, int* buffer_destino, int largura_max, int altura_max) {
+  if (caminho == nullptr || buffer_destino == nullptr || largura_max <= 0 || altura_max <= 0) {
+    return;
+  }
+
+  int largura = 0;
+  int altura = 0;
+  int canais = 0;
+  unsigned char* pixels = stbi_load(caminho, &largura, &altura, &canais, 4);
+  if (pixels == nullptr) {
+    std::cerr << "Falha ao carregar imagem '" << caminho << "': " << stbi_failure_reason() << std::endl;
+    buffer_destino[0] = 0;
+    buffer_destino[1] = 0;
+    return;
+  }
+
+  const int max_pixels = std::max(0, largura_max) * std::max(0, altura_max);
+  const int pixels_arquivo = largura * altura;
+  const int pixels_copiados = std::min(max_pixels, pixels_arquivo);
+  buffer_destino[0] = largura;
+  buffer_destino[1] = altura;
+
+  for (int i = 0; i < pixels_copiados; ++i) {
+    const int src_index = i * 4;
+    const int dst_index = 2 + i;
+    const uint8_t r = pixels[src_index + 0];
+    const uint8_t g = pixels[src_index + 1];
+    const uint8_t b = pixels[src_index + 2];
+    const uint8_t a = pixels[src_index + 3];
+    buffer_destino[dst_index] =
+        static_cast<int>((static_cast<uint32_t>(a) << 24) |
+                         (static_cast<uint32_t>(b) << 16) |
+                         (static_cast<uint32_t>(g) << 8) |
+                         static_cast<uint32_t>(r));
+  }
+
+  stbi_image_free(pixels);
 }
 
 extern "C" void TomGpu_EnfileirarAudio(float* samples, int count) {
@@ -211,6 +279,12 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  using TomTempoFn = void (*)(float, float);
+  auto* tomTempoFn = reinterpret_cast<TomTempoFn>(lookupTomSymbol(handle, "TomGpu_AtualizarTempo"));
+
+  uint64_t previousCounter = SDL_GetPerformanceCounter();
+  float totalSeconds = 0.0f;
+
   std::thread tomThread([tomMain]() {
     tomMain();
   });
@@ -218,6 +292,18 @@ int main(int argc, char** argv) {
 
   bool running = true;
   while (running) {
+    const uint64_t currentCounter = SDL_GetPerformanceCounter();
+    const uint64_t counterDelta = currentCounter - previousCounter;
+    previousCounter = currentCounter;
+    const double frequency = static_cast<double>(SDL_GetPerformanceFrequency());
+    const double dt64 = frequency > 0.0 ? (static_cast<double>(counterDelta) / frequency) : 0.0;
+    const float dt = static_cast<float>(std::max(0.0, dt64));
+    totalSeconds += dt;
+    TomGpu_AtualizarTempo(dt, totalSeconds);
+    if (tomTempoFn) {
+      tomTempoFn(dt, totalSeconds);
+    }
+
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) {

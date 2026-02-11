@@ -21,6 +21,8 @@ let hasScanf = false;
 let hasTomGpuPresent = false;
 let hasTomGpuReadInput = false;
 let hasTomGpuQueueAudio = false;
+let hasTomGpuLoadImage = false;
+let hasTomGpuReadDelta = false;
 let hasSinf = false;
 let lastNumericValue = null;
 let lastTextPointer = null;
@@ -1024,6 +1026,36 @@ function emitGpuOperation(line) {
     return true;
   }
 
+
+  const loadImage = line.match(/^GpuCarregarImgx([A-Za-z_][A-Za-z0-9_]*)x(l'([^']*)')$/);
+  if (loadImage) {
+    const [, bufferName, , pathLiteral] = loadImage;
+    const target = gpuState.buffers.get(bufferName);
+    if (!target) {
+      createError(`GpuCarregarImg falhou: buffer '${bufferName}' não foi criado.`);
+      return true;
+    }
+    if (target.scalarType !== 'In32') {
+      createError(`GpuCarregarImg exige buffer In32. '${bufferName}' está como ${target.scalarType}.`);
+      return true;
+    }
+    if (target.count < 3) {
+      createError(`GpuCarregarImg exige buffer com no mínimo 3 inteiros. '${bufferName}' possui ${target.count}.`);
+      return true;
+    }
+    if (!target.llvmPtr) {
+      createError(`GpuCarregarImg falhou: ponteiro LLVM do buffer '${bufferName}' indisponível.`);
+      return true;
+    }
+
+    const imagePath = decodeTomString(pathLiteral);
+    const strInfo = createGlobalString(imagePath, 'img_path');
+    const strPtr = pointerToGlobal(strInfo);
+    hasTomGpuLoadImage = true;
+    emitInstruction(`call void @TomGpu_CarregarImagem(i8* ${strPtr}, i32* ${target.llvmPtr}, i32 ${target.count - 2}, i32 1)`);
+    return true;
+  }
+
   const readInput = line.match(/^GpuLerInputIn32xBufferDestinox([A-Za-z_][A-Za-z0-9_]*)$/);
   if (readInput) {
     const [, bufferName] = readInput;
@@ -1038,8 +1070,8 @@ function emitGpuOperation(line) {
       return true;
     }
 
-    if (target.count < 8) {
-      createError(`GpuLerInput exige buffer com no mínimo 8 inteiros. '${bufferName}' possui ${target.count}.`);
+    if (target.count < 300) {
+      createError(`GpuLerInput exige buffer com no mínimo 300 inteiros. '${bufferName}' possui ${target.count}.`);
       return true;
     }
 
@@ -1050,6 +1082,28 @@ function emitGpuOperation(line) {
 
     hasTomGpuReadInput = true;
     emitInstruction(`call void @TomGpu_LerInput(i32* ${target.llvmPtr})`);
+    return true;
+  }
+
+
+  const readDelta = line.match(/^GpuLerTempoxVarDt([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (readDelta) {
+    const [, varName] = readDelta;
+    const variable = numericVars.get(varName);
+    if (!variable) {
+      createError(`GpuLerTempo falhou: variável '${varName}' não foi definida.`);
+      return true;
+    }
+    if (variable.llvmType !== 'float') {
+      createError(`GpuLerTempo exige variável Fl32. '${varName}' está como ${variable.llvmType}.`);
+      return true;
+    }
+
+    const dtReg = nextReg();
+    hasTomGpuReadDelta = true;
+    emitInstruction(`${dtReg} = call float @TomGpu_ObterDeltaTempo()`);
+    emitInstruction(`store float ${dtReg}, float* ${variable.ptr}`);
+    lastNumericValue = { reg: dtReg, llvmType: 'float' };
     return true;
   }
 
@@ -1373,6 +1427,12 @@ if (hasTomGpuReadInput) {
 }
 if (hasTomGpuQueueAudio) {
   output.push('declare void @TomGpu_EnfileirarAudio(float*, i32)');
+}
+if (hasTomGpuLoadImage) {
+  output.push('declare void @TomGpu_CarregarImagem(i8*, i32*, i32, i32)');
+}
+if (hasTomGpuReadDelta) {
+  output.push('declare float @TomGpu_ObterDeltaTempo()');
 }
 if (budgetState.runtimeInstrumentation || budgetState.systems.length > 0) {
   output.push('declare i64 @llvm.readcyclecounter()');
