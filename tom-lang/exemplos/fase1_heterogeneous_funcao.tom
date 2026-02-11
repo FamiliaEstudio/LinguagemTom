@@ -1,0 +1,9 @@
+@gpu
+DefFuncaoxSoma[A: Buffer<In32>, B: Buffer<In32>, Out: Buffer<In32>, i: In32]
+GpuLerIn32xAyizvalorA
+GpuLerIn32xByizvalorB
+SomarIn32x@valorAy@valorBzvalorOut
+GpuEscrIn32xOutyizvalorOut
+FimFuncao
+
+SetVarIn32xRety0
