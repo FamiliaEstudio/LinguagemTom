@@ -2,11 +2,54 @@
 
 Runtime host mínimo para executar o `output.ll` compilado da Linguagem Tom e apresentar um buffer de pixels em janela real.
 
-## Build do host
+## Build do host (`tom_gpu_host.cpp`)
+
+Foi adicionado um `Makefile` para centralizar build em Linux/Windows, incluindo SDL2, OpenGL do sistema e suporte opcional a GLAD.
+
+### Linux (padrão: GLEW)
 
 ```bash
-g++ -std=c++17 tom_gpu_host.cpp -o tom_gpu_host -lSDL2 -lGLEW -lGL -ldl -rdynamic
+cd tom-lang/runtime
+make host
 ```
+
+### Linux usando GLAD (em vez de GLEW)
+
+```bash
+cd tom-lang/runtime
+make host GL_LOADER=glad GLAD_SRC=third_party/glad/src/glad.c GLAD_INCLUDE=third_party/glad/include
+```
+
+> Ao usar `GL_LOADER=glad`, o build define `-DTOM_GPU_USE_GLAD` e compila o `glad.c` indicado em `GLAD_SRC`.
+
+### Windows (MinGW/clang ou g++)
+
+```bash
+cd tom-lang/runtime
+make host OS=Windows_NT SDL_LIBS="-lmingw32 -lSDL2main -lSDL2" GL_LOADER=glew
+```
+
+No Windows, o `Makefile` faz link com `opengl32` automaticamente (`-lopengl32`).
+
+## Geração da biblioteca dinâmica carregada pelo jogo
+
+### Linux (`.so`)
+
+```bash
+cd tom-lang/runtime
+make module
+```
+
+Isso gera `tom-lang/exemplos/output.so`.
+
+### Windows (`.dll`)
+
+```bash
+cd tom-lang/runtime
+make module OS=Windows_NT
+```
+
+Isso gera `tom-lang/exemplos/output.dll`.
 
 ## Pipeline completo
 
@@ -16,7 +59,7 @@ node ../tomc.js ../exemplos/gpu_blit.tom
 ```
 2. Transformar `output.ll` em módulo compartilhado:
 ```bash
-clang -shared -fPIC ../exemplos/output.ll -o ../exemplos/output.so
+make module
 ```
 3. Executar host SDL2:
 ```bash
