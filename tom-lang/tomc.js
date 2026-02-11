@@ -10,6 +10,10 @@ const lines = sourceCode
   .filter(Boolean);
 
 const irLines = [];
+const mlirState = {
+  vec4AddModules: [],
+  nextId: 0,
+};
 const globals = [];
 let regCount = 0;
 let globalCount = 0;
@@ -106,6 +110,89 @@ function emitInstruction(instruction) {
     return;
   }
   irLines.push(`  ${instruction}`);
+}
+
+function nextMlirId(prefix = 'v') {
+  mlirState.nextId += 1;
+  return `%${prefix}${mlirState.nextId}`;
+}
+
+function mlirAttr(type, value) {
+  return { kind: 'attr', type, value };
+}
+
+function mlirOp(name, payload = {}) {
+  return {
+    kind: 'op',
+    name,
+    ...payload,
+  };
+}
+
+function formatMlirType(type) {
+  if (Array.isArray(type)) {
+    return type.map((item) => formatMlirType(item)).join(', ');
+  }
+  return type;
+}
+
+function formatMlirAttr(attr) {
+  return `${attr.value} : ${attr.type}`;
+}
+
+function renderMlirOp(op, indent = '    ') {
+  if (op.kind !== 'op') return '';
+
+  if (op.name === 'return') {
+    return `${indent}return`;
+  }
+
+  if (op.name === 'arith.constant') {
+    return `${indent}${op.result} = arith.constant ${formatMlirAttr(op.value)}`;
+  }
+
+  if (op.name === 'arith.addi') {
+    return `${indent}${op.result} = arith.addi ${op.operands.join(', ')} : ${formatMlirType(op.resultType)}`;
+  }
+
+  if (op.name === 'func') {
+    const body = op.body.map((child) => renderMlirOp(child, `${indent}  `)).join('\n');
+    return `${indent}func.func @${op.symbol}() {\n${body}\n${indent}}`;
+  }
+
+  if (op.name === 'module') {
+    const body = op.body.map((child) => renderMlirOp(child, `${indent}  `)).join('\n');
+    return `${indent}module {\n${body}\n${indent}}`;
+  }
+
+  return `${indent}// op desconhecida: ${op.name}`;
+}
+
+function buildVec4AddMlirModule(lhs, rhs, llvmElemType) {
+  const mlirElemType = llvmElemType;
+  const vecType = `vector<4x${mlirElemType}>`;
+  const lhsReg = nextMlirId('lhs');
+  const rhsReg = nextMlirId('rhs');
+  const sumReg = nextMlirId('sum');
+
+  const lhsLiteral = `dense<[${lhs.join(', ')}]>`;
+  const rhsLiteral = `dense<[${rhs.join(', ')}]>`;
+
+  const fn = mlirOp('func', {
+    symbol: `somar_vec4_in32_${mlirState.vec4AddModules.length}`,
+    body: [
+      mlirOp('arith.constant', { result: lhsReg, value: mlirAttr(`tensor<4x${mlirElemType}>`, lhsLiteral) }),
+      mlirOp('arith.constant', { result: rhsReg, value: mlirAttr(`tensor<4x${mlirElemType}>`, rhsLiteral) }),
+      mlirOp('arith.addi', { result: sumReg, operands: [lhsReg, rhsReg], resultType: `tensor<4x${mlirElemType}>` }),
+      mlirOp('return'),
+    ],
+  });
+
+  return mlirOp('module', { body: [fn], resultType: vecType });
+}
+
+function renderMlirModule(moduleNode) {
+  return renderMlirOp(moduleNode, '');
 }
 
 function parseStructPropType(typePrefix, bits) {
@@ -910,6 +997,17 @@ function emitVectorOperation(line) {
     }
     lhs.push(l);
     rhs.push(r);
+  }
+
+  if (op === 'Somar' && llvmElemType === 'i32') {
+    const mlirModule = buildVec4AddMlirModule(lhs, rhs, llvmElemType);
+    mlirState.vec4AddModules.push(mlirModule);
+
+    const reg = nextReg();
+    emitInstruction(`; MLIR lowering (SomarVec4In32) -> output.mlir [${mlirState.vec4AddModules.length - 1}]`);
+    emitInstruction(`${reg} = add ${llvmVecType} <${lhs.map((n) => `${llvmElemType} ${n}`).join(', ')}>, <${rhs.map((n) => `${llvmElemType} ${n}`).join(', ')}>`);
+    trackSystemCost(OP_COSTS[`${op}Vec4`] || 6);
+    return true;
   }
 
   const reg = nextReg();
@@ -2075,6 +2173,12 @@ const llvmOutput = `${output.join('\n')}\n`;
 const outputPath = path.join(path.dirname(inputFile), 'output.ll');
 fs.writeFileSync(outputPath, llvmOutput);
 
+const mlirOutputPath = path.join(path.dirname(inputFile), 'output.mlir');
+const mlirOutput = mlirState.vec4AddModules.length
+  ? `${mlirState.vec4AddModules.map((moduleNode) => renderMlirModule(moduleNode)).join('\n\n')}\n`
+  : 'module {\n  // Nenhuma operação Vec4In32 foi promovida para MLIR nesta compilação.\n}\n';
+fs.writeFileSync(mlirOutputPath, mlirOutput);
+
 const gpuManifest = buildGpuBackendManifest(inputFile);
 const gpuManifestPath = path.join(path.dirname(inputFile), 'output.gpu.json');
 if (gpuManifest) {
@@ -2082,6 +2186,7 @@ if (gpuManifest) {
 }
 
 console.log(`Compilação concluída para '${inputFile}'. Arquivo '${outputPath}' gerado.`);
+console.log(`Saída MLIR gerada em '${mlirOutputPath}'.`);
 if (gpuManifest) {
   console.log(`Manifesto backend GPU gerado em '${gpuManifestPath}'.`);
 }
@@ -2150,5 +2255,7 @@ if (gpuState.buffers.size || gpuState.kernelOrder.length || gpuState.dispatches.
 if (firstError) {
   console.log(`Aviso: ${firstError}`);
 }
-console.log('\nConteúdo gerado:\n');
+console.log('\nConteúdo LLVM gerado:\n');
 console.log(llvmOutput);
+console.log('\nConteúdo MLIR gerado:\n');
+console.log(mlirOutput);
