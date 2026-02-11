@@ -9,6 +9,49 @@ const lines = sourceCode
   .map((line) => line.trim())
   .filter(Boolean);
 
+function buildReuseAnalysis(programLines) {
+  const lastMentionByVar = new Map();
+
+  function markMentions(index, raw) {
+    const refs = raw.matchAll(/@([A-Za-z_][A-Za-z0-9_]*)/g);
+    for (const [, ref] of refs) {
+      if (ref !== 'ULTIMO') {
+        lastMentionByVar.set(ref, index);
+      }
+    }
+
+    const setTarget = raw.match(/^SetVar(?:In|Fl)(?:Sd|Ud)?(?:32|64)x(.+?)y/);
+    if (setTarget) {
+      const target = setTarget[1].trim();
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(target)) {
+        lastMentionByVar.set(target, index);
+      }
+    }
+
+    const ioTarget = raw.match(/^LerEntradaIn(?:Sd|Ud)(?:32|64)x([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (ioTarget) {
+      lastMentionByVar.set(ioTarget[1], index);
+    }
+
+    const deltaTarget = raw.match(/^GpuLerTempoxVarDt([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (deltaTarget) {
+      lastMentionByVar.set(deltaTarget[1], index);
+    }
+  }
+
+  programLines.forEach((line, index) => markMentions(index, line));
+
+  return {
+    lastMentionByVar,
+    canReuseAt(varName, index) {
+      const lastMention = lastMentionByVar.get(varName);
+      return lastMention === undefined || lastMention < index;
+    },
+  };
+}
+
+const reuseAnalysis = buildReuseAnalysis(lines);
+
 const irLines = [];
 const mlirState = {
   vec4AddModules: [],
@@ -34,6 +77,7 @@ let lastTextLength = 0;
 let firstError = null;
 const buffers = new Map();
 const numericVars = new Map();
+let currentLineIndex = -1;
 const compileTimeConsts = new Map();
 const textVars = new Map();
 const structDefinitions = new Map();
@@ -1137,6 +1181,35 @@ function emitControlFlow(line) {
   return false;
 }
 
+function acquireReusableNumericSlot(llvmType) {
+  for (const [varName, variable] of numericVars.entries()) {
+    if (variable.llvmType !== llvmType) continue;
+    if (variable.storageClass !== 'stack') continue;
+    if (!reuseAnalysis.canReuseAt(varName, currentLineIndex)) continue;
+
+    numericVars.delete(varName);
+    return {
+      ptr: variable.ptr,
+      reusedFrom: varName,
+    };
+  }
+  return null;
+}
+
+function allocateNumericStorage(name, llvmType, value) {
+  const reusable = acquireReusableNumericSlot(llvmType);
+  if (reusable) {
+    emitInstruction(`; TOM_REUSE ptr=${reusable.ptr} from=${reusable.reusedFrom} to=${name}`);
+    emitInstruction(`store ${llvmType} ${value}, ${llvmType}* ${reusable.ptr}`);
+    return { ptr: reusable.ptr, storageClass: 'stack' };
+  }
+
+  const ptr = nextReg();
+  emitInstruction(`${ptr} = alloca ${llvmType}`);
+  emitInstruction(`store ${llvmType} ${value}, ${llvmType}* ${ptr}`);
+  return { ptr, storageClass: 'stack' };
+}
+
 function emitDataOperation(line) {
   const soaVecAdd = line.match(/^ParaCadaSOAx([A-Za-z_][A-Za-z0-9_]*)xSomar([A-Za-z_][A-Za-z0-9_]*?)(-?\d+)$/);
   if (soaVecAdd) {
@@ -1292,10 +1365,8 @@ function emitDataOperation(line) {
       return true;
     }
 
-    const ptr = nextReg();
-    emitInstruction(`${ptr} = alloca ${llvmType}`);
-    emitInstruction(`store ${llvmType} ${value}, ${llvmType}* ${ptr}`);
-    numericVars.set(name, { llvmType, ptr });
+    const allocation = allocateNumericStorage(name, llvmType, value);
+    numericVars.set(name, { llvmType, ptr: allocation.ptr, storageClass: allocation.storageClass });
     return true;
   }
 
@@ -1309,10 +1380,8 @@ function emitDataOperation(line) {
       return true;
     }
 
-    const ptr = nextReg();
-    emitInstruction(`${ptr} = alloca ${llvmType}`);
-    emitInstruction(`store ${llvmType} ${value}, ${llvmType}* ${ptr}`);
-    numericVars.set(name, { llvmType, ptr });
+    const allocation = allocateNumericStorage(name, llvmType, value);
+    numericVars.set(name, { llvmType, ptr: allocation.ptr, storageClass: allocation.storageClass });
     return true;
   }
 
@@ -1505,7 +1574,7 @@ function emitZoneOperation(line) {
     emitInstruction(`${intPtr} = bitcast i8* ${bytePtr} to i32*`);
     emitInstruction(`store i32 ${valueRes.value}, i32* ${intPtr}`);
 
-    numericVars.set(name, { llvmType: 'i32', ptr: intPtr });
+    numericVars.set(name, { llvmType: 'i32', ptr: intPtr, storageClass: 'zone' });
     zone.allocatedVars.add(name);
     zone.offset += bytesNeeded;
     return true;
@@ -2072,7 +2141,9 @@ function emitGpuOperation(line) {
 
 emitRuntimeBudgetPrelude();
 
-for (const line of lines) {
+for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+  currentLineIndex = lineIndex;
+  const line = lines[lineIndex];
   if (emitStructDefinition(line)) continue;
   if (emitControlFlow(line)) continue;
   if (emitGpuOperation(line)) continue;
