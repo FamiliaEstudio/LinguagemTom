@@ -1208,7 +1208,277 @@ function resolveCompileTimeConstValue(name, llvmType, isFloat) {
   return parseNumber(String(rawValue), llvmType, isFloat);
 }
 
+function criarAstLayoutDados(inputLines) {
+  const ast = {
+    lines: [...inputLines],
+    structDefs: new Map(),
+    instances: new Map(),
+    paraCadaLoops: [],
+  };
+
+  let openStruct = null;
+  for (let index = 0; index < ast.lines.length; index += 1) {
+    const line = ast.lines[index];
+
+    const structStart = line.match(/^DefStructSOAx([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (structStart) {
+      openStruct = {
+        name: structStart[1],
+        startIndex: index,
+        endIndex: null,
+        props: [],
+      };
+      ast.structDefs.set(openStruct.name, openStruct);
+      continue;
+    }
+
+    if (openStruct) {
+      if (line === 'FimDef') {
+        openStruct.endIndex = index;
+        openStruct = null;
+        continue;
+      }
+
+      const propMatch = line.match(/^Prop(In|Fl)(32|64)x([A-Za-z_][A-Za-z0-9_]*)$/);
+      if (propMatch) {
+        openStruct.props.push({
+          name: propMatch[3],
+          propLine: line,
+        });
+      }
+      continue;
+    }
+
+    const defArraySoA = line.match(/^DefArraySoAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)x(\d+)$/);
+    if (defArraySoA) {
+      ast.instances.set(defArraySoA[1], {
+        instanceName: defArraySoA[1],
+        structName: defArraySoA[2],
+        countRaw: defArraySoA[3],
+        lineIndex: index,
+        kind: 'DefArraySoA',
+      });
+      continue;
+    }
+
+    const allocSoa = line.match(/^AlocSOAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)xy?(\d+)$/);
+    if (allocSoa) {
+      ast.instances.set(allocSoa[2], {
+        instanceName: allocSoa[2],
+        structName: allocSoa[1],
+        countRaw: allocSoa[3],
+        lineIndex: index,
+        kind: 'AlocSOA',
+      });
+      continue;
+    }
+
+    const paraCadaSoA = line.match(/^ParaCadaSOAx([A-Za-z_][A-Za-z0-9_]*)xSomar([A-Za-z_][A-Za-z0-9_]*?)(-?\d+)$/);
+    if (paraCadaSoA) {
+      ast.paraCadaLoops.push({
+        lineIndex: index,
+        instanceName: paraCadaSoA[1],
+        propertyName: paraCadaSoA[2],
+      });
+    }
+  }
+
+  return ast;
+}
+
+function otimizarLayoutDados(ast, options = {}) {
+  const hotThreshold = options.hotThreshold ?? 1;
+  const coldThreshold = options.coldThreshold ?? 0.1;
+  const report = {
+    splitStructs: new Map(),
+    transformed: false,
+  };
+
+  const statsByStruct = new Map();
+  for (const loop of ast.paraCadaLoops) {
+    const instanceInfo = ast.instances.get(loop.instanceName);
+    if (!instanceInfo) continue;
+    const structName = instanceInfo.structName;
+    if (!ast.structDefs.has(structName)) continue;
+
+    if (!statsByStruct.has(structName)) {
+      statsByStruct.set(structName, {
+        totalLoops: 0,
+        fieldHits: new Map(),
+        coAccess: new Map(),
+      });
+    }
+
+    const stats = statsByStruct.get(structName);
+    stats.totalLoops += 1;
+    stats.fieldHits.set(loop.propertyName, (stats.fieldHits.get(loop.propertyName) || 0) + 1);
+
+    if (!stats.coAccess.has(loop.propertyName)) {
+      stats.coAccess.set(loop.propertyName, new Set());
+    }
+    stats.coAccess.get(loop.propertyName).add(loop.propertyName);
+  }
+
+  for (const [structName, structDef] of ast.structDefs.entries()) {
+    const stats = statsByStruct.get(structName);
+    if (!stats || stats.totalLoops === 0 || structDef.props.length < 2) continue;
+
+    const hotFields = [];
+    const coldFields = [];
+    for (const prop of structDef.props) {
+      const hits = stats.fieldHits.get(prop.name) || 0;
+      const ratio = hits / stats.totalLoops;
+      if (ratio >= hotThreshold) {
+        hotFields.push(prop.name);
+      }
+    }
+
+    if (!hotFields.length) continue;
+
+    for (const prop of structDef.props) {
+      if (hotFields.includes(prop.name)) continue;
+      const hits = stats.fieldHits.get(prop.name) || 0;
+      const ratio = hits / stats.totalLoops;
+      const coAccessWithHot = hotFields.some((hotField) => {
+        const coSet = stats.coAccess.get(prop.name);
+        return coSet ? coSet.has(hotField) : false;
+      });
+      if (ratio <= coldThreshold || !coAccessWithHot) {
+        coldFields.push(prop.name);
+      }
+    }
+
+    if (!coldFields.length) continue;
+
+    const hotFieldSet = new Set(hotFields);
+    const coldFieldSet = new Set(coldFields);
+    report.splitStructs.set(structName, {
+      hotName: `${structName}_Hot`,
+      coldName: `${structName}_Cold`,
+      hotFields,
+      coldFields,
+      hotFieldSet,
+      coldFieldSet,
+    });
+  }
+
+  if (!report.splitStructs.size) {
+    return {
+      lines: ast.lines,
+      report,
+    };
+  }
+
+  const rewritten = [];
+  const instanceSplitMap = new Map();
+
+  for (let index = 0; index < ast.lines.length; index += 1) {
+    const line = ast.lines[index];
+
+    const structStart = line.match(/^DefStructSOAx([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (structStart) {
+      const splitInfo = report.splitStructs.get(structStart[1]);
+      const structDef = ast.structDefs.get(structStart[1]);
+      if (splitInfo && structDef && Number.isInteger(structDef.endIndex)) {
+        rewritten.push(`DefStructSOAx${splitInfo.hotName}`);
+        for (const prop of structDef.props) {
+          if (splitInfo.hotFieldSet.has(prop.name)) rewritten.push(prop.propLine);
+        }
+        rewritten.push('FimDef');
+
+        rewritten.push(`DefStructSOAx${splitInfo.coldName}`);
+        for (const prop of structDef.props) {
+          if (splitInfo.coldFieldSet.has(prop.name)) rewritten.push(prop.propLine);
+        }
+        rewritten.push('FimDef');
+
+        index = structDef.endIndex;
+        report.transformed = true;
+        continue;
+      }
+    }
+
+    const defArraySoA = line.match(/^DefArraySoAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)x(\d+)$/);
+    if (defArraySoA && report.splitStructs.has(defArraySoA[2])) {
+      const [, instanceName, structName, countRaw] = defArraySoA;
+      const splitInfo = report.splitStructs.get(structName);
+      const hotInstance = `${instanceName}_Hot`;
+      const coldInstance = `${instanceName}_Cold`;
+      instanceSplitMap.set(instanceName, { hotInstance, coldInstance, splitInfo });
+      rewritten.push(`DefArraySoAx${hotInstance}x${splitInfo.hotName}x${countRaw}`);
+      rewritten.push(`DefArraySoAx${coldInstance}x${splitInfo.coldName}x${countRaw}`);
+      report.transformed = true;
+      continue;
+    }
+
+    const allocSoa = line.match(/^AlocSOAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)xy?(\d+)$/);
+    if (allocSoa && report.splitStructs.has(allocSoa[1])) {
+      const [, structName, instanceName, countRaw] = allocSoa;
+      const splitInfo = report.splitStructs.get(structName);
+      const hotInstance = `${instanceName}_Hot`;
+      const coldInstance = `${instanceName}_Cold`;
+      instanceSplitMap.set(instanceName, { hotInstance, coldInstance, splitInfo });
+      rewritten.push(`AlocSOAx${splitInfo.hotName}x${hotInstance}x${countRaw}`);
+      rewritten.push(`AlocSOAx${splitInfo.coldName}x${coldInstance}x${countRaw}`);
+      report.transformed = true;
+      continue;
+    }
+
+    let rewrittenLine = line;
+    rewrittenLine = rewrittenLine.replace(
+      /([A-Za-z_][A-Za-z0-9_]*)@(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+)\.([A-Za-z_][A-Za-z0-9_]*)/g,
+      (fullMatch, instanceName, indexRaw, propertyName) => {
+        const mapping = instanceSplitMap.get(instanceName);
+        if (!mapping) return fullMatch;
+        if (mapping.splitInfo.hotFieldSet.has(propertyName)) {
+          return `${mapping.hotInstance}@${indexRaw}.${propertyName}`;
+        }
+        if (mapping.splitInfo.coldFieldSet.has(propertyName)) {
+          return `${mapping.coldInstance}@${indexRaw}.${propertyName}`;
+        }
+        return fullMatch;
+      },
+    );
+
+    const getVarSoA = rewrittenLine.match(/^GetVarx([A-Za-z_][A-Za-z0-9_]*)xIndex(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+)x([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (getVarSoA) {
+      const [, instanceName, indexRaw, propertyName] = getVarSoA;
+      const mapping = instanceSplitMap.get(instanceName);
+      if (mapping) {
+        const resolvedInstance = mapping.splitInfo.hotFieldSet.has(propertyName)
+          ? mapping.hotInstance
+          : mapping.coldInstance;
+        rewrittenLine = `GetVarx${resolvedInstance}xIndex${indexRaw}x${propertyName}`;
+        report.transformed = true;
+      }
+    }
+
+    const paraCadaSoA = rewrittenLine.match(/^ParaCadaSOAx([A-Za-z_][A-Za-z0-9_]*)xSomar([A-Za-z_][A-Za-z0-9_]*?)(-?\d+)$/);
+    if (paraCadaSoA) {
+      const [, instanceName, propertyName, amountRaw] = paraCadaSoA;
+      const mapping = instanceSplitMap.get(instanceName);
+      if (mapping) {
+        const resolvedInstance = mapping.splitInfo.hotFieldSet.has(propertyName)
+          ? mapping.hotInstance
+          : mapping.coldInstance;
+        rewrittenLine = `ParaCadaSOAx${resolvedInstance}xSomar${propertyName}${amountRaw}`;
+        report.transformed = true;
+      }
+    }
+
+    rewritten.push(rewrittenLine);
+  }
+
+  return {
+    lines: rewritten,
+    report,
+  };
+}
+
 lines = executeComptimeBlocks(rawLines);
+const layoutAst = criarAstLayoutDados(lines);
+const layoutOptimization = otimizarLayoutDados(layoutAst);
+lines = layoutOptimization.lines;
 reuseAnalysis = buildReuseAnalysis(lines);
 budgetState.runtimeInstrumentation = lines.some((line) => /^DefBudgetFramexyTargetFPSy(\d+)$/.test(line));
 
