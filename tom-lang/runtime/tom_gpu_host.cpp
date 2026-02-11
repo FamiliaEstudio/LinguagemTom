@@ -624,6 +624,10 @@ extern "C" void TomGpu_EnfileirarAudio(float* samples, int count) {
   }
 }
 
+extern "C" void TomBudgetManager_Report(char* name, int64_t cost) {
+  // Stub para satisfazer o linker no Windows
+}
+
 int main(int argc, char** argv) {
   if (argc < 2) {
     std::cerr << "Uso: ./tom_gpu_host <modulo_tom.(so|dll)> [manifesto.json]" << std::endl;
