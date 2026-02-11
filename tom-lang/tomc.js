@@ -145,6 +145,11 @@ function parseFunctionAst(programLines) {
       continue;
     }
 
+    if (line === '@kernel') {
+      pendingDecorators.push({ kind: 'kernel', raw: '@kernel' });
+      continue;
+    }
+
     const wcetDecorator = line.match(/^@garantia\(\s*ciclos\s*:\s*(\d+)\s*\)$/);
     if (wcetDecorator) {
       pendingDecorators.push({ kind: 'garantia', cycles: Number.parseInt(wcetDecorator[1], 10), raw: line });
@@ -1715,6 +1720,8 @@ function emitHostStub(funcTIR) {
   const globalsOut = [];
   const definitions = [];
   const warnings = [];
+  const decorators = Array.isArray(funcTIR?.metadata?.decorators) ? funcTIR.metadata.decorators : [];
+  const isHybridKernel = decorators.includes('@kernel');
 
   const llvmParams = params.map((param) => {
     const llvmType = tomTypeToLlvmType(param.type);
@@ -1735,10 +1742,16 @@ function emitHostStub(funcTIR) {
   }
 
   const cpuSymbol = `@${functionName}_CPU`;
+  const pcoreSymbol = `@${functionName}_pcore`;
+  const ecoreSymbol = `@${functionName}_ecore`;
+  const currentSymbol = `@${functionName}_Atual`;
+  const frameSelectSymbol = `@${functionName}_SelecionarNucleo`;
   const dispatchSymbol = `@${functionName}_Dispatch`;
   const stubSignature = llvmParams.map((param) => `${param.llvmType} %${param.name}`).join(', ');
   const cpuCallArgs = llvmParams.map((param) => `${param.llvmType} %${param.name}`).join(', ');
   const dispatchArgs = cpuCallArgs;
+  const llvmParamTypes = llvmParams.map((param) => param.llvmType).join(', ');
+  const fnPtrType = `void (${llvmParamTypes})*`;
 
   const sizeParam = llvmParams.find((param) => param.llvmType === 'i32' && /^n$/i.test(param.name))
     || llvmParams.find((param) => param.llvmType === 'i32');
@@ -1746,6 +1759,50 @@ function emitHostStub(funcTIR) {
   declarations.add(`declare void ${cpuSymbol}(${stubSignature})`);
   declarations.add('declare i32 @tom_is_gpu_ready()');
   declarations.add('declare void @tom_gpu_dispatch(i8*, ...)');
+
+  if (isHybridKernel) {
+    declarations.add('declare i32 @TomRuntime_IsCurrentThreadPCore()');
+
+    globalsOut.push(`${currentSymbol} = global ${fnPtrType} ${ecoreSymbol}`);
+
+    definitions.push(`define void ${pcoreSymbol}(${stubSignature}) alwaysinline "target-cpu"="alderlake" "target-features"="+avx2,+avx512f" "llvm.loop.unroll.enable"="true" {`);
+    definitions.push('entry:');
+    definitions.push(`  call void ${cpuSymbol}(${cpuCallArgs})`);
+    definitions.push('  ret void');
+    definitions.push('}');
+    definitions.push('');
+
+    definitions.push(`define void ${ecoreSymbol}(${stubSignature}) minsize optsize "target-cpu"="alderlake" "target-features"="-avx,-avx2,-avx512f" "prefer-vector-width"="128" "llvm.loop.vectorize.enable"="false" "llvm.loop.interleave.enable"="false" {`);
+    definitions.push('entry:');
+    definitions.push(`  call void ${cpuSymbol}(${cpuCallArgs})`);
+    definitions.push('  ret void');
+    definitions.push('}');
+    definitions.push('');
+
+    definitions.push(`define void ${frameSelectSymbol}() {`);
+    definitions.push('entry:');
+    definitions.push('  %is_pcore_i32 = call i32 @TomRuntime_IsCurrentThreadPCore()');
+    definitions.push('  %is_pcore = icmp eq i32 %is_pcore_i32, 1');
+    definitions.push(`  %selected = select i1 %is_pcore, ${fnPtrType} ${pcoreSymbol}, ${fnPtrType} ${ecoreSymbol}`);
+    definitions.push(`  store ${fnPtrType} %selected, ${fnPtrType}* ${currentSymbol}`);
+    definitions.push('  ret void');
+    definitions.push('}');
+    definitions.push('');
+
+    definitions.push(`define void ${dispatchSymbol}(${stubSignature}) {`);
+    definitions.push('entry:');
+    definitions.push(`  %active_fn = load ${fnPtrType}, ${fnPtrType}* ${currentSymbol}`);
+    definitions.push(`  call void %active_fn(${cpuCallArgs})`);
+    definitions.push('  ret void');
+    definitions.push('}');
+
+    return {
+      declarations,
+      globals: globalsOut,
+      definitions,
+      warnings,
+    };
+  }
 
   const gpuKeyText = `${functionName}_GLSL_Code`;
   const gpuKeyEscaped = escapeLlvmString(gpuKeyText);

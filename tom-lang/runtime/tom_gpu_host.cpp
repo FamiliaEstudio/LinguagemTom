@@ -8,8 +8,12 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <processthreadsapi.h>
+#include <intrin.h>
 #else
 #include <dlfcn.h>
+#include <cpuid.h>
+#include <sched.h>
 #endif
 
 #include <nlohmann/json.hpp>
@@ -122,6 +126,50 @@ GLuint g_presentProgram = 0;
 GLuint g_presentVao = 0;
 
 std::atomic<bool> g_runtimeReady{false};
+
+int detectLogicalCoreType() {
+#ifdef _WIN32
+  PROCESSOR_NUMBER processorNumber{};
+  if (!GetCurrentProcessorNumberEx(&processorNumber)) {
+    return -1;
+  }
+
+  int cpuInfo[4] = {0, 0, 0, 0};
+  (void)processorNumber;
+  __cpuidex(cpuInfo, 0x1A, 0);
+  if (cpuInfo[0] == 0 && cpuInfo[1] == 0 && cpuInfo[2] == 0 && cpuInfo[3] == 0) {
+    return -1;
+  }
+  return (cpuInfo[0] >> 24) & 0xFF;
+#else
+  if (sched_getcpu() < 0) {
+    return -1;
+  }
+
+  unsigned eax = 0;
+  unsigned ebx = 0;
+  unsigned ecx = 0;
+  unsigned edx = 0;
+  if (!__get_cpuid_count(0x1A, 0, &eax, &ebx, &ecx, &edx)) {
+    return -1;
+  }
+  return static_cast<int>((eax >> 24) & 0xFF);
+#endif
+}
+
+bool isCurrentThreadOnPCore() {
+  const int coreType = detectLogicalCoreType();
+  if (coreType < 0) {
+    return true;
+  }
+
+  constexpr int kIntelCoreTypeECore = 0x20;
+  constexpr int kIntelCoreTypePCore = 0x40;
+
+  if (coreType == kIntelCoreTypeECore) return false;
+  if (coreType == kIntelCoreTypePCore) return true;
+  return true;
+}
 
 std::string readTextFile(const std::string& path) {
   std::ifstream input(path);
@@ -694,6 +742,10 @@ extern "C" void TomBudgetManager_Report(char* name, int64_t cost) {
   BudgetSample& sample = g_budgetSamples[it->second];
   sample.costCycles = cost;
   sample.costMs = costMs;
+}
+
+extern "C" int32_t TomRuntime_IsCurrentThreadPCore() {
+  return isCurrentThreadOnPCore() ? 1 : 0;
 }
 
 int main(int argc, char** argv) {
