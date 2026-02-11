@@ -1108,6 +1108,125 @@ function scalarToGlslType(scalarType) {
   return null;
 }
 
+function tomTypeToLlvmType(typeInfo) {
+  if (!typeInfo) return null;
+  if (typeInfo.kind === 'buffer') {
+    const elem = tomTypeToLlvmType({ kind: 'scalar', name: typeInfo.elementType });
+    return elem ? `${elem}*` : null;
+  }
+
+  const scalar = String(typeInfo.name || '');
+  if (scalar === 'Fl32') return 'float';
+  if (scalar === 'Fl64') return 'double';
+  if (scalar === 'In32') return 'i32';
+  if (scalar === 'In64') return 'i64';
+  return null;
+}
+
+function emitHostStub(funcTIR) {
+  const functionName = funcTIR?.metadata?.name || 'TomFunc';
+  const params = Array.isArray(funcTIR?.metadata?.params) ? funcTIR.metadata.params : [];
+  const target = funcTIR?.target || 'auto';
+  const declarations = new Set();
+  const globalsOut = [];
+  const definitions = [];
+  const warnings = [];
+
+  const llvmParams = params.map((param) => {
+    const llvmType = tomTypeToLlvmType(param.type);
+    return {
+      name: param.name,
+      llvmType,
+    };
+  });
+
+  if (llvmParams.some((param) => !param.llvmType)) {
+    warnings.push(`emitHostStub ignorou '${functionName}': assinatura possui tipo não suportado para LLVM stub.`);
+    return {
+      declarations,
+      globals: globalsOut,
+      definitions,
+      warnings,
+    };
+  }
+
+  const cpuSymbol = `@${functionName}_CPU`;
+  const dispatchSymbol = `@${functionName}_Dispatch`;
+  const stubSignature = llvmParams.map((param) => `${param.llvmType} %${param.name}`).join(', ');
+  const cpuCallArgs = llvmParams.map((param) => `${param.llvmType} %${param.name}`).join(', ');
+  const dispatchArgs = cpuCallArgs;
+
+  const sizeParam = llvmParams.find((param) => param.llvmType === 'i32' && /^n$/i.test(param.name))
+    || llvmParams.find((param) => param.llvmType === 'i32');
+
+  declarations.add(`declare void ${cpuSymbol}(${stubSignature})`);
+  declarations.add('declare i32 @tom_is_gpu_ready()');
+  declarations.add('declare void @tom_gpu_dispatch(i8*, ...)');
+
+  const gpuKeyText = `${functionName}_GLSL_Code`;
+  const gpuKeyEscaped = escapeLlvmString(gpuKeyText);
+  const gpuKeySize = Buffer.byteLength(gpuKeyText, 'utf8') + 1;
+  const gpuKeySymbol = `@.tom_gpu_key_${functionName}`;
+  globalsOut.push(`${gpuKeySymbol} = private unnamed_addr constant [${gpuKeySize} x i8] c"${gpuKeyEscaped}\\00"`);
+
+  definitions.push(`define void ${dispatchSymbol}(${stubSignature}) {`);
+  definitions.push('entry:');
+
+  if (target === 'cpu') {
+    definitions.push(`  call void ${cpuSymbol}(${cpuCallArgs})`);
+    definitions.push('  ret void');
+    definitions.push('}');
+    return {
+      declarations,
+      globals: globalsOut,
+      definitions,
+      warnings,
+    };
+  }
+
+  if (!sizeParam) {
+    warnings.push(`emitHostStub fallback para CPU em '${functionName}': parâmetro i32 para heurística (@auto) não encontrado.`);
+    definitions.push(`  call void ${cpuSymbol}(${cpuCallArgs})`);
+    definitions.push('  ret void');
+    definitions.push('}');
+    return {
+      declarations,
+      globals: globalsOut,
+      definitions,
+      warnings,
+    };
+  }
+
+  definitions.push(`  %should_offload = icmp sgt i32 %${sizeParam.name}, 10000`);
+  definitions.push('  %gpu_ready_i32 = call i32 @tom_is_gpu_ready()');
+  definitions.push('  %gpu_ready = icmp eq i32 %gpu_ready_i32, 1');
+
+  if (target === 'gpu') {
+    definitions.push('  br i1 %gpu_ready, label %dispatch_gpu, label %dispatch_cpu');
+  } else {
+    definitions.push('  %use_gpu = and i1 %should_offload, %gpu_ready');
+    definitions.push('  br i1 %use_gpu, label %dispatch_gpu, label %dispatch_cpu');
+  }
+
+  definitions.push('dispatch_gpu:');
+  definitions.push(`  %gpu_key_ptr = getelementptr inbounds [${gpuKeySize} x i8], [${gpuKeySize} x i8]* ${gpuKeySymbol}, i64 0, i64 0`);
+  definitions.push(`  call void (i8*, ...) @tom_gpu_dispatch(i8* %gpu_key_ptr${dispatchArgs ? `, ${dispatchArgs}` : ''})`);
+  definitions.push('  br label %dispatch_exit');
+  definitions.push('dispatch_cpu:');
+  definitions.push(`  call void ${cpuSymbol}(${cpuCallArgs})`);
+  definitions.push('  br label %dispatch_exit');
+  definitions.push('dispatch_exit:');
+  definitions.push('  ret void');
+  definitions.push('}');
+
+  return {
+    declarations,
+    globals: globalsOut,
+    definitions,
+    warnings,
+  };
+}
+
 function emitGlslFromTir(funcTIR) {
   const functionName = funcTIR?.metadata?.name || 'TomKernel';
   const params = Array.isArray(funcTIR?.metadata?.params) ? funcTIR.metadata.params : [];
@@ -2882,6 +3001,33 @@ if (firstError) {
   terminateCurrentBlock('ret i32 1');
 }
 
+const hostStubArtifacts = tomIrFunctions.map((func) => ({
+  name: func.metadata.name,
+  target: func.target,
+  ...emitHostStub(func),
+}));
+
+const hostStubDeclarations = [];
+const hostStubDeclarationSet = new Set();
+const hostStubDefinitions = [];
+for (const artifact of hostStubArtifacts) {
+  for (const warning of artifact.warnings) {
+    console.warn(`[tomc] ${warning}`);
+  }
+  for (const globalLine of artifact.globals) {
+    globals.push(globalLine);
+  }
+  for (const decl of artifact.declarations) {
+    if (!hostStubDeclarationSet.has(decl)) {
+      hostStubDeclarationSet.add(decl);
+      hostStubDeclarations.push(decl);
+    }
+  }
+  if (artifact.definitions.length) {
+    hostStubDefinitions.push(artifact.definitions.join('\n'));
+  }
+}
+
 const output = [];
 if (globals.length > 0) {
   output.push(...globals);
@@ -2925,6 +3071,10 @@ if (budgetState.runtimeInstrumentation || budgetState.systems.length > 0) {
   output.push('@TomPerf_StressLevel = external global i32');
 }
 
+if (hostStubDeclarations.length > 0) {
+  output.push(...hostStubDeclarations);
+}
+
 output.push('', 'define i32 @main() {', 'entry:');
 output.push(...irLines);
 
@@ -2939,6 +3089,10 @@ if (!firstError && lastNumericValue && lastNumericValue.llvmType.startsWith('i')
 }
 
 output.push('}');
+
+if (hostStubDefinitions.length > 0) {
+  output.push('', ...hostStubDefinitions);
+}
 
 const llvmOutput = `${output.join('\n')}\n`;
 const outputPath = path.join(path.dirname(inputFile), 'output.ll');
@@ -2959,6 +3113,7 @@ if (gpuManifest) {
 const tirOutputPath = path.join(path.dirname(inputFile), 'output.tir.json');
 const tirFunctionsWithBackends = tomIrFunctions.map((func) => {
   const glslCompute = emitGlslFromTir(func);
+  const hostStub = emitHostStub(func);
   return {
     ...func,
     backends: {
@@ -2969,6 +3124,12 @@ const tirFunctionsWithBackends = tomIrFunctions.map((func) => {
         pushConstants: glslCompute.pushConstants,
         source: glslCompute.source,
         unsupported: glslCompute.unsupported,
+      },
+      llvm_host_stub: {
+        declarations: [...hostStub.declarations],
+        globals: hostStub.globals,
+        ir: hostStub.definitions.join('\n'),
+        warnings: hostStub.warnings,
       },
     },
   };
