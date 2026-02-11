@@ -31,6 +31,7 @@ let firstError = null;
 const buffers = new Map();
 const numericVars = new Map();
 const textVars = new Map();
+const structDefinitions = new Map();
 const budgetState = {
   frameTargetFps: null,
   systems: [],
@@ -57,6 +58,13 @@ const controlState = {
   currentBlock: 'entry',
   blockTerminated: false,
 };
+const structState = {
+  currentDefinition: null,
+};
+
+const STRUCT_DEF_START_REGEX = /^DefStructSOAx([A-Za-z_][A-Za-z0-9_]*)$/;
+const STRUCT_DEF_PROP_REGEX = /^Prop(In|Fl)(32|64)x([A-Za-z_][A-Za-z0-9_]*)$/;
+const STRUCT_DEF_END = 'FimDef';
 
 const TOMC_TOMCYCLES_PER_MS = 1000;
 budgetState.runtimeInstrumentation = lines.some((line) => /^DefBudgetFramexyTargetFPSy(\d+)$/.test(line));
@@ -95,6 +103,62 @@ function emitInstruction(instruction) {
     return;
   }
   irLines.push(`  ${instruction}`);
+}
+
+function parseStructPropType(typePrefix, bits) {
+  if (typePrefix === 'In' && bits === '32') return 'i32';
+  if (typePrefix === 'In' && bits === '64') return 'i64';
+  if (typePrefix === 'Fl' && bits === '32') return 'float';
+  if (typePrefix === 'Fl' && bits === '64') return 'double';
+  return null;
+}
+
+function emitStructDefinition(line) {
+  if (structState.currentDefinition) {
+    if (line === STRUCT_DEF_END) {
+      const { name, props } = structState.currentDefinition;
+      structDefinitions.set(name, { props: [...props] });
+      structState.currentDefinition = null;
+      return true;
+    }
+
+    const propMatch = line.match(STRUCT_DEF_PROP_REGEX);
+    if (!propMatch) {
+      createError(`Comando inválido em DefStructSOA '${structState.currentDefinition.name}': ${line}`);
+      return true;
+    }
+
+    const [, typePrefix, bits, propName] = propMatch;
+    const propType = parseStructPropType(typePrefix, bits);
+    if (!propType) {
+      createError(`Tipo de propriedade SOA inválido: ${typePrefix}${bits}.`);
+      return true;
+    }
+
+    const hasDuplicate = structState.currentDefinition.props.some((prop) => prop.name === propName);
+    if (hasDuplicate) {
+      createError(`Propriedade '${propName}' duplicada em DefStructSOA '${structState.currentDefinition.name}'.`);
+      return true;
+    }
+
+    structState.currentDefinition.props.push({ name: propName, type: propType });
+    return true;
+  }
+
+  const structStart = line.match(STRUCT_DEF_START_REGEX);
+  if (!structStart) return false;
+
+  const [, structName] = structStart;
+  if (structDefinitions.has(structName)) {
+    createError(`DefStructSOA duplicado para '${structName}'.`);
+    return true;
+  }
+
+  structState.currentDefinition = {
+    name: structName,
+    props: [],
+  };
+  return true;
 }
 
 function terminateCurrentBlock(terminator) {
@@ -1438,6 +1502,7 @@ function emitGpuOperation(line) {
 emitRuntimeBudgetPrelude();
 
 for (const line of lines) {
+  if (emitStructDefinition(line)) continue;
   if (emitControlFlow(line)) continue;
   if (emitGpuOperation(line)) continue;
   if (emitBudgetDirective(line)) continue;
@@ -1452,6 +1517,10 @@ for (const line of lines) {
 
 emitRuntimeBudgetEpilogue();
 emitStaticBudgetWarnings();
+
+if (!firstError && structState.currentDefinition) {
+  createError(`DefStructSOA '${structState.currentDefinition.name}' não foi finalizado com FimDef.`);
+}
 
 if (!firstError && gpuState.currentKernel) {
   createError(`Kernel '${gpuState.currentKernel.name}' não foi finalizado com FimDef.`);
