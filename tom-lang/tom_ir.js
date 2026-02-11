@@ -75,36 +75,9 @@ function buildParaCadaSoaTomIr({ instanceName, propertyName, count, amount, elem
   });
 }
 
-function renderTomIrNodeAsMlir(node, indent = '  ') {
-  if (node.kind === 'TomIR.AffineFor') {
-    const body = node.body.map((child) => renderTomIrNodeAsMlir(child, `${indent}  `)).join('\n');
-    return `${indent}affine.for ${node.iv} = ${node.lowerBound} to ${node.upperBound} step ${node.step} {\n${body}\n${indent}}`;
-  }
-
-  if (node.kind === 'TomIR.SoaAddScalar') {
-    const loadReg = '%loaded';
-    const sumReg = '%sum';
-    const cstReg = '%addcst';
-    return [
-      `${indent}${cstReg} = arith.constant ${node.amount} : ${node.elementType}`,
-      `${indent}${loadReg} = affine.load ${node.bufferArg}[${node.indexVar}] : memref<?x${node.elementType}>`,
-      `${indent}${sumReg} = arith.addi ${loadReg}, ${cstReg} : ${node.elementType}`,
-      `${indent}affine.store ${sumReg}, ${node.bufferArg}[${node.indexVar}] : memref<?x${node.elementType}>`,
-    ].join('\n');
-  }
-
-  return `${indent}// nó TomIR não suportado: ${node.kind}`;
-}
-
-function renderTomIrModuleAsMlir(moduleNode) {
-  const functionBlocks = moduleNode.functions.map((fn) => {
-    const args = fn.args.map((arg) => `${arg.name}: ${arg.type}`).join(', ');
-    const body = fn.body.map((node) => renderTomIrNodeAsMlir(node, '    ')).join('\n');
-    return `  func.func @${fn.name}(${args}) {\n${body}\n    return\n  }`;
-  }).join('\n');
-
-  return `module {\n${functionBlocks}\n}`;
-}
+const {
+  renderTomIrModuleAsMlir,
+} = require('./tom_to_mlir');
 
 module.exports = {
   TomIrModule,
