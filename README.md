@@ -1019,3 +1019,33 @@ Com isso, a Tom fica apta para o vertical slice de RPG (estado de jogador/inimig
 - Esse comando gera chamada LLVM externa: `@TomGpu_Present(i32* buffer_ptr, i32 width, i32 height)`.
 - Runtime host SDL2 disponível em `tom-lang/runtime/tom_gpu_host.cpp` para abrir janela e apresentar o buffer de pixels.
 - Exemplo de blitting em Tom puro: `tom-lang/exemplos/gpu_blit.tom` (inclui indexação `Y * Width + X` com `Multi` + `Somar`).
+
+### Comptime (execução em compilação) no `tomc.js`
+
+O compilador agora reconhece blocos:
+
+- `EscopoInixComptime`
+- `EscopoFimxComptime`
+
+As instruções dentro do bloco são executadas imediatamente em JavaScript durante a transpilação e não viram IR de runtime.
+
+Comandos suportados no bloco Comptime:
+
+- `CompDefConstxNOMEy<expressao_js>`
+- `CompDefVarIn32|In64|Fl32|Fl64xNOMEy<expressao_js>`
+- `CompSetVarIn32|In64|Fl32|Fl64xNOMEy<expressao_js>`
+- `Somar|Subtr|Multi|Dividxy...z<saida>` (forma numérica compatível)
+- `CompGlobalConstIn32|In64|Fl32|Fl64xNOMEy<expressao_js_ou_array>`
+
+`CompGlobalConst...` injeta um símbolo LLVM `private constant` como `@ct_<NOME>`.
+
+Exemplo para LUT de seno (360 valores):
+
+```tom
+EscopoInixComptime
+CompGlobalConstFl32xSinLUT360y(()=>{let a=[];for(let i=0;i<360;i++)a.push(Math.sin(i*Math.PI/180));return a;})()
+EscopoFimxComptime
+DefVarInSd32xProntoy1
+```
+
+Veja também: `tom-lang/exemplos/comptime_sin_lut.tom`.

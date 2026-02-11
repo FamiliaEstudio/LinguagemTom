@@ -4,10 +4,12 @@ const path = require('path');
 const inputFile = process.argv[2] || 'teste.tom';
 const sourceCode = fs.readFileSync(inputFile, 'utf-8');
 
-const lines = sourceCode
+const rawLines = sourceCode
   .split('\n')
   .map((line) => line.trim())
   .filter(Boolean);
+
+let lines = rawLines;
 
 function buildReuseAnalysis(programLines) {
   const lastMentionByVar = new Map();
@@ -50,7 +52,7 @@ function buildReuseAnalysis(programLines) {
   };
 }
 
-const reuseAnalysis = buildReuseAnalysis(lines);
+let reuseAnalysis = buildReuseAnalysis(lines);
 
 const irLines = [];
 const mlirState = {
@@ -79,6 +81,9 @@ const buffers = new Map();
 const numericVars = new Map();
 let currentLineIndex = -1;
 const compileTimeConsts = new Map();
+const comptimeState = {
+  emittedGlobals: new Map(),
+};
 const textVars = new Map();
 const structDefinitions = new Map();
 const soaVars = new Map();
@@ -118,7 +123,6 @@ const STRUCT_DEF_PROP_REGEX = /^Prop(In|Fl)(32|64)x([A-Za-z_][A-Za-z0-9_]*)$/;
 const STRUCT_DEF_END = 'FimDef';
 
 const TOMC_TOMCYCLES_PER_MS = 1000;
-budgetState.runtimeInstrumentation = lines.some((line) => /^DefBudgetFramexyTargetFPSy(\d+)$/.test(line));
 
 const OP_COSTS = {
   Somar: 1,
@@ -391,11 +395,217 @@ function evaluateCompileTimeExpression(expression, line) {
   }
 }
 
+function evaluateComptimeExpression(expression, line, context = {}) {
+  try {
+    const names = Object.keys(context);
+    const values = Object.values(context);
+    const evaluator = new Function(...names, `return (${expression});`);
+    return evaluator(...values);
+  } catch (err) {
+    createError(`Comptime falhou ao avaliar '${expression}': ${err.message} (${line})`);
+    return null;
+  }
+}
+
+function normalizeComptimeScalar(value, llvmType, line) {
+  if (llvmType === 'float' || llvmType === 'double') {
+    const n = Number(value);
+    if (!Number.isFinite(n)) {
+      createError(`Comptime inválido: '${line}' precisa gerar número finito.`);
+      return null;
+    }
+    return String(n);
+  }
+
+  const n = Number(value);
+  if (!Number.isInteger(n)) {
+    createError(`Comptime inválido: '${line}' precisa gerar número inteiro para ${llvmType}.`);
+    return null;
+  }
+  if (llvmType === 'i32' && (n < -2147483648 || n > 2147483647)) {
+    createError(`Comptime inválido: inteiro fora da faixa i32 em '${line}'.`);
+    return null;
+  }
+  return String(n);
+}
+
+function emitComptimeGlobalConstant(kind, bits, name, value, line) {
+  const llvmType = kind === 'Fl'
+    ? (bits === '32' ? 'float' : 'double')
+    : (bits === '32' ? 'i32' : 'i64');
+  const llvmGlobal = `@ct_${name}`;
+  if (comptimeState.emittedGlobals.has(llvmGlobal)) {
+    createError(`CompGlobalConst duplicado para '${name}'.`);
+    return;
+  }
+
+  const values = Array.isArray(value) ? value : [value];
+  if (values.length === 0) {
+    createError(`CompGlobalConst inválido: array vazio para '${name}'.`);
+    return;
+  }
+
+  const normalized = [];
+  for (const item of values) {
+    const scalar = normalizeComptimeScalar(item, llvmType, line);
+    if (scalar === null) return;
+    normalized.push(scalar);
+  }
+
+  const initializer = normalized.map((entry) => `${llvmType} ${entry}`).join(', ');
+  globals.push(`${llvmGlobal} = private constant [${normalized.length} x ${llvmType}] [${initializer}]`);
+  comptimeState.emittedGlobals.set(llvmGlobal, {
+    llvmType,
+    count: normalized.length,
+  });
+}
+
+function executeComptimeBlocks(programLines) {
+  const outputLines = [];
+  const baseContext = {
+    Math,
+    TOM: {
+      sinDeg: (deg) => Math.sin((Number(deg) * Math.PI) / 180),
+      cosDeg: (deg) => Math.cos((Number(deg) * Math.PI) / 180),
+    },
+  };
+
+  let inComptimeBlock = false;
+  const comptimeConsts = new Map();
+  const comptimeVars = new Map();
+
+  function getContext() {
+    return {
+      ...baseContext,
+      ...Object.fromEntries(comptimeConsts),
+      ...Object.fromEntries(comptimeVars),
+    };
+  }
+
+  function getNumericFromSource(raw, llvmType, line) {
+    const value = raw.startsWith('@') ? comptimeVars.get(raw.slice(1)) : raw;
+    if (value === undefined) {
+      createError(`Comptime falhou: '${raw}' não foi definido (${line}).`);
+      return null;
+    }
+    return normalizeComptimeScalar(value, llvmType, line);
+  }
+
+  for (const line of programLines) {
+    if (line === 'EscopoInixComptime') {
+      if (inComptimeBlock) {
+        createError('Comptime inválido: bloco EscopoInixComptime aninhado.');
+        return outputLines;
+      }
+      inComptimeBlock = true;
+      continue;
+    }
+
+    if (line === 'EscopoFimxComptime') {
+      if (!inComptimeBlock) {
+        createError('Comptime inválido: EscopoFimxComptime sem início.');
+        return outputLines;
+      }
+      inComptimeBlock = false;
+      continue;
+    }
+
+    if (!inComptimeBlock) {
+      outputLines.push(line);
+      continue;
+    }
+
+    const defConst = line.match(/^CompDefConstx([A-Za-z_][A-Za-z0-9_]*)y(.+)$/);
+    if (defConst) {
+      const [, name, expression] = defConst;
+      const result = evaluateComptimeExpression(expression, line, getContext());
+      if (result === null) return outputLines;
+      comptimeConsts.set(name, result);
+      continue;
+    }
+
+    const defVar = line.match(/^CompDefVar(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y(.+)$/);
+    if (defVar) {
+      const [, kind, bits, name, expression] = defVar;
+      const llvmType = kind === 'Fl' ? (bits === '32' ? 'float' : 'double') : (bits === '32' ? 'i32' : 'i64');
+      const result = evaluateComptimeExpression(expression, line, getContext());
+      if (result === null) return outputLines;
+      const normalized = normalizeComptimeScalar(result, llvmType, line);
+      if (normalized === null) return outputLines;
+      comptimeVars.set(name, Number(normalized));
+      continue;
+    }
+
+    const setVar = line.match(/^CompSetVar(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y(.+)$/);
+    if (setVar) {
+      const [, kind, bits, name, expression] = setVar;
+      if (!comptimeVars.has(name)) {
+        createError(`Comptime falhou: variável '${name}' não definida (${line}).`);
+        return outputLines;
+      }
+      const llvmType = kind === 'Fl' ? (bits === '32' ? 'float' : 'double') : (bits === '32' ? 'i32' : 'i64');
+      const result = evaluateComptimeExpression(expression, line, getContext());
+      if (result === null) return outputLines;
+      const normalized = normalizeComptimeScalar(result, llvmType, line);
+      if (normalized === null) return outputLines;
+      comptimeVars.set(name, Number(normalized));
+      continue;
+    }
+
+    const arith = line.match(/^(Somar|Subtr|Multi|Divid)xy(Fl|In)(Sd|Ud)?(32|64)x(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)y(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)z([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (arith) {
+      const [, op, kind, , bits, leftRaw, rightRaw, outVar] = arith;
+      if (!comptimeVars.has(outVar)) {
+        createError(`Comptime falhou: variável de saída '${outVar}' não definida (${line}).`);
+        return outputLines;
+      }
+      const llvmType = kind === 'Fl' ? (bits === '32' ? 'float' : 'double') : (bits === '32' ? 'i32' : 'i64');
+      const left = getNumericFromSource(leftRaw, llvmType, line);
+      const right = getNumericFromSource(rightRaw, llvmType, line);
+      if (left === null || right === null) return outputLines;
+      const leftNum = Number(left);
+      const rightNum = Number(right);
+      let result = null;
+      if (op === 'Somar') result = leftNum + rightNum;
+      if (op === 'Subtr') result = leftNum - rightNum;
+      if (op === 'Multi') result = leftNum * rightNum;
+      if (op === 'Divid') result = leftNum / rightNum;
+      const normalized = normalizeComptimeScalar(result, llvmType, line);
+      if (normalized === null) return outputLines;
+      comptimeVars.set(outVar, Number(normalized));
+      continue;
+    }
+
+    const emitGlobal = line.match(/^CompGlobalConst(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y(.+)$/);
+    if (emitGlobal) {
+      const [, kind, bits, name, expression] = emitGlobal;
+      const value = evaluateComptimeExpression(expression, line, getContext());
+      if (value === null) return outputLines;
+      emitComptimeGlobalConstant(kind, bits, name, value, line);
+      if (firstError) return outputLines;
+      continue;
+    }
+
+    createError(`Comando Comptime não reconhecido: ${line}`);
+    return outputLines;
+  }
+
+  if (inComptimeBlock) {
+    createError('Comptime inválido: bloco EscopoInixComptime sem EscopoFimxComptime.');
+  }
+
+  return outputLines;
+}
+
 function resolveCompileTimeConstValue(name, llvmType, isFloat) {
   if (!compileTimeConsts.has(name)) return null;
   const rawValue = compileTimeConsts.get(name);
   return parseNumber(String(rawValue), llvmType, isFloat);
 }
+
+lines = executeComptimeBlocks(rawLines);
+reuseAnalysis = buildReuseAnalysis(lines);
+budgetState.runtimeInstrumentation = lines.some((line) => /^DefBudgetFramexyTargetFPSy(\d+)$/.test(line));
 
 function parseSoaPropertyAccess(raw) {
   const match = raw.match(/^([A-Za-z_][A-Za-z0-9_]*)@(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+)\.([A-Za-z_][A-Za-z0-9_]*)$/);
