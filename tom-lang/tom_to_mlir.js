@@ -54,6 +54,10 @@ function traduzirTipo(tomType) {
 }
 
 function inferTypeFromValue(value, fallback = 'i32') {
+  if (fallback === 'index') {
+    return 'index';
+  }
+
   if (value && typeof value === 'object' && value.type) {
     return traduzirTipo(value.type);
   }
@@ -140,6 +144,12 @@ class FunctionLoweringContext {
       '-': { i32: 'arith.subi', f32: 'arith.subf' },
       '*': { i32: 'arith.muli', f32: 'arith.mulf' },
       '/': { i32: 'arith.divsi', f32: 'arith.divf' },
+      '<': { i32: 'arith.cmpi slt', f32: 'arith.cmpf olt' },
+      '<=': { i32: 'arith.cmpi sle', f32: 'arith.cmpf ole' },
+      '>': { i32: 'arith.cmpi sgt', f32: 'arith.cmpf ogt' },
+      '>=': { i32: 'arith.cmpi sge', f32: 'arith.cmpf oge' },
+      '==': { i32: 'arith.cmpi eq', f32: 'arith.cmpf oeq' },
+      '!=': { i32: 'arith.cmpi ne', f32: 'arith.cmpf one' },
     };
 
     const family = opMap[op];
@@ -150,16 +160,17 @@ class FunctionLoweringContext {
 
     const mlirOp = family[arithmeticType] || family.i32;
     const result = this.freshValue('tmp');
+    const isComparison = ['<', '<=', '>', '>=', '==', '!='].includes(op);
     this.printer.line(`${result} = ${mlirOp} ${lhs.reg}, ${rhs.reg} : ${arithmeticType}`);
-    return { reg: result, type: arithmeticType };
+    return { reg: result, type: isComparison ? 'i1' : arithmeticType };
   }
 
   emitValue(value, expectedType = null) {
     if (value && typeof value === 'object' && value.kind === 'TomIR.BinaryOp') {
-      const lhs = this.emitValue(value.left, expectedType || value.type);
-      const rhs = this.emitValue(value.right, expectedType || value.type);
-      const type = traduzirTipo(value.type || lhs.type || rhs.type || expectedType || 'i32');
-      return this.emitBinaryOp(value.op, lhs, rhs, type);
+      const binaryType = traduzirTipo(value.type || 'i32');
+      const lhs = this.emitValue(value.left, binaryType);
+      const rhs = this.emitValue(value.right, binaryType);
+      return this.emitBinaryOp(value.op, lhs, rhs, binaryType);
     }
 
     if (typeof value === 'number') {
@@ -183,6 +194,8 @@ class FunctionLoweringContext {
         this.printer.line(`${cst} = arith.constant ${normalized} : ${type}`);
         return { reg: cst, type };
       }
+
+      return { reg: `%${normalized}`, type: traduzirTipo(expectedType || 'i32') };
     }
 
     const fallbackType = traduzirTipo(expectedType || 'i32');
@@ -190,6 +203,37 @@ class FunctionLoweringContext {
     this.printer.line(`${zero} = arith.constant 0 : ${fallbackType}`);
     return { reg: zero, type: fallbackType };
   }
+}
+
+function resolveLoopBound(bound, ctx) {
+  if (typeof bound === 'number') {
+    return { kind: 'constant', value: bound };
+  }
+
+  if (typeof bound === 'string') {
+    const trimmed = bound.trim();
+    if (/^-?\d+$/.test(trimmed)) {
+      return { kind: 'constant', value: Number(trimmed) };
+    }
+
+    if (trimmed.startsWith('%')) {
+      return { kind: 'symbol', value: trimmed };
+    }
+
+    return { kind: 'symbol', value: `%${trimmed}` };
+  }
+
+  if (bound && typeof bound === 'object' && bound.kind === 'TomIR.BinaryOp') {
+    const lowered = ctx.emitValue(bound);
+    return { kind: 'dynamic', value: lowered.reg, type: lowered.type };
+  }
+
+  const fallback = ctx.emitValue(bound, 'index');
+  return { kind: 'dynamic', value: fallback.reg, type: fallback.type };
+}
+
+function isAffineBound(boundInfo) {
+  return boundInfo.kind === 'constant' || boundInfo.kind === 'symbol';
 }
 
 function renderTomIrNode(node, ctx) {
@@ -200,7 +244,63 @@ function renderTomIrNode(node, ctx) {
       for (const child of node.body) {
         renderTomIrNode(child, ctx);
       }
+      printer.line('affine.yield');
     });
+    return;
+  }
+
+  if (node.kind === 'TomIR.ScfFor') {
+    const lower = resolveLoopBound(node.lowerBound, ctx);
+    const upper = resolveLoopBound(node.upperBound, ctx);
+    const step = resolveLoopBound(node.step, ctx);
+
+    const canBeAffine = isAffineBound(lower) && isAffineBound(upper) && step.kind === 'constant';
+    if (canBeAffine) {
+      printer.block(`affine.for ${node.iv} = ${lower.value} to ${upper.value} step ${step.value}`, () => {
+        for (const child of node.body || []) {
+          renderTomIrNode(child, ctx);
+        }
+        printer.line('affine.yield');
+      });
+      return;
+    }
+
+    const lowerReg = lower.kind === 'dynamic' ? lower.value : (lower.kind === 'symbol' ? lower.value : ctx.emitValue(lower.value, 'index').reg);
+    const upperReg = upper.kind === 'dynamic' ? upper.value : (upper.kind === 'symbol' ? upper.value : ctx.emitValue(upper.value, 'index').reg);
+    const stepReg = step.kind === 'dynamic' ? step.value : (step.kind === 'symbol' ? step.value : ctx.emitValue(step.value, 'index').reg);
+
+    printer.block(`scf.for ${node.iv} = ${lowerReg} to ${upperReg} step ${stepReg}`, () => {
+      for (const child of node.body || []) {
+        renderTomIrNode(child, ctx);
+      }
+      printer.line('scf.yield');
+    });
+    return;
+  }
+
+  if (node.kind === 'TomIR.If') {
+    const cond = ctx.emitValue(node.condition);
+    const hasElse = node.elseBody && node.elseBody.length > 0;
+
+    printer.line(`scf.if ${cond.reg} {`);
+    printer.indentLevel += 1;
+    for (const child of node.thenBody || []) {
+      renderTomIrNode(child, ctx);
+    }
+    printer.line('scf.yield');
+    printer.indentLevel = Math.max(0, printer.indentLevel - 1);
+
+    if (hasElse) {
+      printer.line('} else {');
+      printer.indentLevel += 1;
+      for (const child of node.elseBody) {
+        renderTomIrNode(child, ctx);
+      }
+      printer.line('scf.yield');
+      printer.indentLevel = Math.max(0, printer.indentLevel - 1);
+    }
+
+    printer.line('}');
     return;
   }
 

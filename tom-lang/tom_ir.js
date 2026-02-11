@@ -58,6 +58,26 @@ class TomIrReturn extends TomIrNode {
   }
 }
 
+class TomIrIf extends TomIrNode {
+  constructor({ condition, thenBody = [], elseBody = [] }) {
+    super('TomIR.If');
+    this.condition = condition;
+    this.thenBody = thenBody;
+    this.elseBody = elseBody;
+  }
+}
+
+class TomIrScfFor extends TomIrNode {
+  constructor({ iv, lowerBound = 0, upperBound, step = 1, body = [] }) {
+    super('TomIR.ScfFor');
+    this.iv = iv;
+    this.lowerBound = lowerBound;
+    this.upperBound = upperBound;
+    this.step = step;
+    this.body = body;
+  }
+}
+
 class TomIrAffineFor extends TomIrNode {
   constructor({ iv, lowerBound = 0, upperBound, step = 1, body = [] }) {
     super('TomIR.AffineFor');
@@ -152,6 +172,8 @@ module.exports = {
   TomIrAssign,
   TomIrBinaryOp,
   TomIrReturn,
+  TomIrIf,
+  TomIrScfFor,
   buildParaCadaSoaTomIr,
   buildSimpleSumTomIr,
   renderTomIrModuleAsMlir,
