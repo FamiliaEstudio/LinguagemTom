@@ -32,6 +32,7 @@ const buffers = new Map();
 const numericVars = new Map();
 const textVars = new Map();
 const structDefinitions = new Map();
+const soaVars = new Map();
 const budgetState = {
   frameTargetFps: null,
   systems: [],
@@ -848,6 +849,45 @@ function emitControlFlow(line) {
 }
 
 function emitDataOperation(line) {
+  const allocSoa = line.match(/^AlocSOAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)xy(\d+)$/)
+    || line.match(/^AlocSOAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)x(\d+)$/);
+  if (allocSoa) {
+    const [, structName, instanceName, countRaw] = allocSoa;
+    const structDef = structDefinitions.get(structName);
+    if (!structDef) {
+      createError(`AlocSOA falhou: struct '${structName}' não foi definida.`);
+      return true;
+    }
+
+    if (soaVars.has(instanceName)) {
+      createError(`AlocSOA duplicado para instância '${instanceName}'.`);
+      return true;
+    }
+
+    const count = Number.parseInt(countRaw, 10);
+    if (!Number.isInteger(count) || count <= 0) {
+      createError(`AlocSOA inválido: quantidade '${countRaw}' em ${line}`);
+      return true;
+    }
+
+    const propPointers = new Map();
+    for (const prop of structDef.props) {
+      const ptrName = `%${instanceName}_${prop.name}`;
+      emitInstruction(`${ptrName} = alloca [${count} x ${prop.type}]`);
+      propPointers.set(prop.name, {
+        ptr: ptrName,
+        llvmType: prop.type,
+      });
+    }
+
+    soaVars.set(instanceName, {
+      structName,
+      count,
+      propPointers,
+    });
+    return true;
+  }
+
   const decl = line.match(/^DefVar(In)(Sd|Ud)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([^\s]+)$/);
   if (decl) {
     const [, , , bits, name, valueRaw] = decl;
