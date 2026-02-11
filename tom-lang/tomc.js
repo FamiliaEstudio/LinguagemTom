@@ -192,9 +192,111 @@ function lowerAstToTomIr(functionAst) {
   }));
 }
 
+function checkGpuEligibility(funcAST) {
+  const reasons = [];
+  const seenReasons = new Set();
+  const parameterNames = new Set((funcAST.metadata?.params || []).map((param) => param.name));
+  const knownLocalNames = new Set(parameterNames);
+  let score = 0;
+
+  function addReason(reason) {
+    if (!seenReasons.has(reason)) {
+      reasons.push(reason);
+      seenReasons.add(reason);
+    }
+  }
+
+  const deterministicLoopStart = /^Para\s+[A-Za-z_][A-Za-z0-9_]*\s+de\s+[^\s]+\s+ate\s+[^\s]+$/;
+  const deterministicLoopEnd = /^FimPara$/;
+  const indexedAssignment = /^[A-Za-z_][A-Za-z0-9_]*\s*\[[^\]]+\]\s*=\s*.+$/;
+  const indexedRead = /^[A-Za-z_][A-Za-z0-9_]*\s*=\s*[A-Za-z_][A-Za-z0-9_]*\s*\[[^\]]+\]\s*$/;
+  const externalCallPattern = /^([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)$/;
+
+  for (const instruction of funcAST.instructions || []) {
+    if (instruction.op === 'OpAddSubMulDiv') {
+      knownLocalNames.add(instruction.out);
+      score += 1;
+      continue;
+    }
+
+    if (instruction.op === 'OpLoad') {
+      knownLocalNames.add(instruction.out);
+      continue;
+    }
+
+    if (instruction.op === 'OpStore') {
+      continue;
+    }
+
+    if (instruction.op !== 'OpRaw') {
+      addReason(`Função '${funcAST.metadata.name}': instrução '${instruction.op}' não suportada no backend GPU MVP.`);
+      continue;
+    }
+
+    const source = String(instruction.source || '').trim();
+
+    if (/^(Exibir|Print|LerEntrada|LerTeclado|LerArquivo|EscreverArquivo|GpuLerInput)/.test(source)) {
+      addReason(`Função '${funcAST.metadata.name}': I/O não é permitido para execução em GPU ('${source}').`);
+      continue;
+    }
+
+    if (/\b(malloc|calloc|realloc|new)\b/i.test(source) || /^GpuBufCriar/.test(source)) {
+      addReason(`Função '${funcAST.metadata.name}': alocação dinâmica não é permitida para execução em GPU ('${source}').`);
+      continue;
+    }
+
+    const setVar = source.match(/^SetVar(?:In|Fl)(?:Sd|Ud)?(?:32|64)x([A-Za-z_][A-Za-z0-9_]*)y/);
+    if (setVar) {
+      const [, targetName] = setVar;
+      if (!knownLocalNames.has(targetName)) {
+        addReason(`Função '${funcAST.metadata.name}': escrita em variável global mutável '${targetName}' sem passagem por argumento.`);
+      }
+      continue;
+    }
+
+    if (deterministicLoopStart.test(source) || deterministicLoopEnd.test(source)) {
+      continue;
+    }
+
+    if (indexedAssignment.test(source) || indexedRead.test(source)) {
+      score += (source.match(/[+\-*/]/g) || []).length;
+      continue;
+    }
+
+    const externalCall = source.match(externalCallPattern);
+    if (externalCall) {
+      const [, callName] = externalCall;
+      addReason(`Função '${funcAST.metadata.name}': chamada externa desconhecida '${callName}' impede offload para GPU.`);
+      continue;
+    }
+
+    if (/[+\-*/]/.test(source)) {
+      score += (source.match(/[+\-*/]/g) || []).length;
+      continue;
+    }
+
+    addReason(`Função '${funcAST.metadata.name}': instrução não reconhecida para GPU ('${source}').`);
+  }
+
+  return {
+    eligible: reasons.length === 0,
+    reasons,
+    score,
+  };
+}
+
 const parsedFunctions = parseFunctionAst(rawLines);
 const functionAst = parsedFunctions.ast;
 const tomIrFunctions = lowerAstToTomIr(functionAst);
+let pendingGpuEligibilityFatalError = null;
+for (const func of tomIrFunctions) {
+  const gpuEligibility = checkGpuEligibility(func);
+  func.metadata.gpuEligibility = gpuEligibility;
+
+  if (func.target === 'gpu' && !gpuEligibility.eligible && !pendingGpuEligibilityFatalError) {
+    pendingGpuEligibilityFatalError = `Função @gpu '${func.metadata.name}' não é elegível para GPU: ${gpuEligibility.reasons.join(' | ')}`;
+  }
+}
 lines = parsedFunctions.passthroughLines;
 
 function buildReuseAnalysis(programLines) {
@@ -263,6 +365,9 @@ let lastNumericValue = null;
 let lastTextPointer = null;
 let lastTextLength = 0;
 let firstError = null;
+if (pendingGpuEligibilityFatalError) {
+  firstError = pendingGpuEligibilityFatalError;
+}
 const buffers = new Map();
 const numericVars = new Map();
 let currentLineIndex = -1;
