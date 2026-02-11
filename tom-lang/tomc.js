@@ -299,6 +299,128 @@ for (const func of tomIrFunctions) {
 }
 lines = parsedFunctions.passthroughLines;
 
+function annotateSafetyContexts(programLines) {
+  const annotatedLines = [];
+  let unsafeDepth = 0;
+
+  for (let index = 0; index < programLines.length; index += 1) {
+    const rawLine = programLines[index];
+    const line = String(rawLine || '').trim();
+    if (!line) continue;
+
+    if (/^Inseguro(?:\s*\{)?$/.test(line)) {
+      unsafeDepth += 1;
+      continue;
+    }
+
+    if (/^(?:\}|FimInseguro)$/.test(line)) {
+      if (unsafeDepth === 0) {
+        return { error: `Bloco Inseguro inválido: fechamento sem abertura na linha ${index + 1}.` };
+      }
+      unsafeDepth -= 1;
+      continue;
+    }
+
+    annotatedLines.push({
+      line,
+      lineNumber: index + 1,
+      isUnsafe: unsafeDepth > 0,
+    });
+  }
+
+  if (unsafeDepth > 0) {
+    return { error: 'Bloco Inseguro inválido: abertura sem fechamento.' };
+  }
+
+  return { annotatedLines };
+}
+
+function extractIdentifierMentions(rawLine) {
+  const names = new Set();
+  const references = String(rawLine || '').matchAll(/@?([A-Za-z_][A-Za-z0-9_]*)/g);
+  for (const [, name] of references) {
+    names.add(name);
+  }
+  return names;
+}
+
+function verificarSeguranca(annotatedLines) {
+  const zoneLifetimes = new Map();
+  const variableLifetimes = new Map();
+
+  function currentZoneState(zoneName) {
+    return zoneLifetimes.get(zoneName) || { epoch: 0, alive: false };
+  }
+
+  for (const entry of annotatedLines) {
+    const { line, lineNumber, isUnsafe } = entry;
+
+    const zoneDef = line.match(/^ZonaDefx([A-Za-z_][A-Za-z0-9_]*)y\d+$/);
+    if (zoneDef) {
+      const [, zoneName] = zoneDef;
+      zoneLifetimes.set(zoneName, { epoch: 0, alive: true });
+      continue;
+    }
+
+    const zoneReset = line.match(/^ZonaRstx([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (zoneReset) {
+      const [, zoneName] = zoneReset;
+      const zone = currentZoneState(zoneName);
+      zoneLifetimes.set(zoneName, { epoch: zone.epoch + 1, alive: zone.alive });
+      continue;
+    }
+
+    const zoneKill = line.match(/^ZonaMatarx([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (zoneKill) {
+      const [, zoneName] = zoneKill;
+      const zone = currentZoneState(zoneName);
+      zoneLifetimes.set(zoneName, { epoch: zone.epoch + 1, alive: false });
+      continue;
+    }
+
+    const zoneDecl = line.match(/^DefZnIn(?:Sd|Ud)?32x([A-Za-z_][A-Za-z0-9_]*)y[^\s]+z([A-Za-z_][A-Za-z0-9_]*)$/);
+    if (zoneDecl) {
+      const [, varName, zoneName] = zoneDecl;
+      const zone = currentZoneState(zoneName);
+      variableLifetimes.set(varName, {
+        zoneName,
+        birthEpoch: zone.epoch,
+      });
+      continue;
+    }
+
+    if (isUnsafe) continue;
+
+    const mentionedNames = extractIdentifierMentions(line);
+    for (const name of mentionedNames) {
+      const lifetime = variableLifetimes.get(name);
+      if (!lifetime) continue;
+
+      const zone = currentZoneState(lifetime.zoneName);
+      if (!zone.alive || zone.epoch !== lifetime.birthEpoch) {
+        return {
+          error: `VerificarSeguranca falhou: uso após invalidação de '${name}' na linha ${lineNumber} (zona '${lifetime.zoneName}', tag ${lifetime.zoneName}@${lifetime.birthEpoch}).`,
+        };
+      }
+    }
+  }
+
+  return { error: null };
+}
+
+const safetyAnnotated = annotateSafetyContexts(lines);
+if (safetyAnnotated.error && !pendingGpuEligibilityFatalError) {
+  pendingGpuEligibilityFatalError = safetyAnnotated.error;
+}
+
+const annotatedLines = safetyAnnotated.annotatedLines || [];
+const safetyCheck = verificarSeguranca(annotatedLines);
+if (!pendingGpuEligibilityFatalError && safetyCheck.error) {
+  pendingGpuEligibilityFatalError = safetyCheck.error;
+}
+
+lines = annotatedLines.map((entry) => entry.line);
+
 function buildReuseAnalysis(programLines) {
   const lastMentionByVar = new Map();
 
@@ -2413,6 +2535,22 @@ function emitZoneOperation(line) {
     }
     zone.allocatedVars.clear();
     zone.offset = 0;
+    return true;
+  }
+
+  const zoneKill = line.match(/^ZonaMatarx([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (zoneKill) {
+    const [, zoneName] = zoneKill;
+    const zone = zoneState.get(zoneName);
+    if (!zone) {
+      createError(`ZonaMatar falhou: zona '${zoneName}' não foi definida.`);
+      return true;
+    }
+
+    for (const varName of zone.allocatedVars) {
+      numericVars.delete(varName);
+    }
+    zoneState.delete(zoneName);
     return true;
   }
 
