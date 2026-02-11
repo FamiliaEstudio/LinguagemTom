@@ -13,6 +13,7 @@
 #else
 #include <dlfcn.h>
 #include <cpuid.h>
+#include <pthread.h>
 #include <sched.h>
 #endif
 
@@ -23,9 +24,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <mutex>
 #include <optional>
@@ -34,6 +39,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -126,6 +132,333 @@ GLuint g_presentProgram = 0;
 GLuint g_presentVao = 0;
 
 std::atomic<bool> g_runtimeReady{false};
+
+class TopologyAwareScheduler {
+ public:
+  using Task = std::function<void()>;
+
+  TopologyAwareScheduler() { start(); }
+
+  explicit TopologyAwareScheduler(uint32_t workerCountHint) { start(workerCountHint); }
+
+  ~TopologyAwareScheduler() { stop(); }
+
+  TopologyAwareScheduler(const TopologyAwareScheduler&) = delete;
+  TopologyAwareScheduler& operator=(const TopologyAwareScheduler&) = delete;
+
+  void submit(Task task) {
+    if (!task) {
+      return;
+    }
+
+    const size_t groupCount = m_groups.size();
+    if (groupCount == 0) {
+      task();
+      return;
+    }
+
+    const size_t target = m_rrSubmit.fetch_add(1, std::memory_order_relaxed) % groupCount;
+    {
+      std::lock_guard<std::mutex> lock(m_groups[target].queueMutex);
+      m_groups[target].queue.emplace_back(std::move(task));
+    }
+    m_cv.notify_all();
+  }
+
+  void stop() {
+    bool expected = false;
+    if (!m_stopping.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+      return;
+    }
+
+    m_cv.notify_all();
+    for (auto& worker : m_workers) {
+      if (worker.thread.joinable()) {
+        worker.thread.join();
+      }
+    }
+    m_workers.clear();
+  }
+
+ private:
+  struct L3Group {
+    std::vector<unsigned> logicalCpus;
+    std::mutex queueMutex;
+    std::deque<Task> queue;
+  };
+
+  struct WorkerCtx {
+    size_t groupIndex = 0;
+    size_t cpuIndexInGroup = 0;
+    std::thread thread;
+  };
+
+  std::vector<L3Group> m_groups;
+  std::vector<WorkerCtx> m_workers;
+  std::condition_variable m_cv;
+  std::mutex m_cvMutex;
+  std::atomic<bool> m_stopping{false};
+  std::atomic<size_t> m_rrSubmit{0};
+
+  void start(uint32_t workerCountHint = 0) {
+    m_groups = discoverL3Groups();
+    if (m_groups.empty()) {
+      m_groups.push_back(fallbackGroup());
+    }
+
+    uint32_t workerCount = workerCountHint;
+    if (workerCount == 0) {
+      workerCount = static_cast<uint32_t>(std::thread::hardware_concurrency());
+    }
+    if (workerCount == 0) {
+      workerCount = 1;
+    }
+
+    const uint32_t maxWorkersFromTopology = totalLogicalCpuCount();
+    workerCount = std::min(workerCount, std::max(1u, maxWorkersFromTopology));
+
+    m_workers.reserve(workerCount);
+    std::vector<size_t> perGroupCursor(m_groups.size(), 0);
+
+    for (uint32_t i = 0; i < workerCount; ++i) {
+      const size_t groupIndex = chooseGroupForWorker(i);
+      const auto& cpus = m_groups[groupIndex].logicalCpus;
+      size_t cpuIndexInGroup = 0;
+      if (!cpus.empty()) {
+        cpuIndexInGroup = perGroupCursor[groupIndex] % cpus.size();
+        perGroupCursor[groupIndex]++;
+      }
+
+      WorkerCtx worker;
+      worker.groupIndex = groupIndex;
+      worker.cpuIndexInGroup = cpuIndexInGroup;
+      worker.thread = std::thread([this, groupIndex, cpuIndexInGroup]() {
+        pinCurrentThread(groupIndex, cpuIndexInGroup);
+        workerLoop(groupIndex);
+      });
+      m_workers.emplace_back(std::move(worker));
+    }
+  }
+
+  size_t chooseGroupForWorker(uint32_t workerIndex) const {
+    if (m_groups.empty()) {
+      return 0;
+    }
+    return static_cast<size_t>(workerIndex) % m_groups.size();
+  }
+
+  uint32_t totalLogicalCpuCount() const {
+    uint32_t total = 0;
+    for (const auto& group : m_groups) {
+      total += static_cast<uint32_t>(group.logicalCpus.size());
+    }
+    return total;
+  }
+
+  static std::vector<unsigned> parseCpuRangeList(const std::string& cpuList) {
+    std::vector<unsigned> cpus;
+    std::stringstream ss(cpuList);
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+      if (token.empty()) {
+        continue;
+      }
+
+      const size_t dash = token.find('-');
+      if (dash == std::string::npos) {
+        cpus.push_back(static_cast<unsigned>(std::stoul(token)));
+        continue;
+      }
+
+      const unsigned begin = static_cast<unsigned>(std::stoul(token.substr(0, dash)));
+      const unsigned end = static_cast<unsigned>(std::stoul(token.substr(dash + 1)));
+      if (end < begin) {
+        continue;
+      }
+      for (unsigned cpu = begin; cpu <= end; ++cpu) {
+        cpus.push_back(cpu);
+      }
+    }
+
+    std::sort(cpus.begin(), cpus.end());
+    cpus.erase(std::unique(cpus.begin(), cpus.end()), cpus.end());
+    return cpus;
+  }
+
+  static std::vector<L3Group> discoverL3Groups() {
+#ifdef _WIN32
+    return discoverL3GroupsWindows();
+#else
+    return discoverL3GroupsLinux();
+#endif
+  }
+
+  static std::vector<L3Group> discoverL3GroupsLinux() {
+    std::vector<L3Group> groups;
+    std::unordered_set<std::string> visitedSharedLists;
+
+    for (unsigned cpu = 0; cpu < 512; ++cpu) {
+      const std::string base = "/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cache";
+      for (unsigned index = 0; index < 32; ++index) {
+        const std::string levelPath = base + "/index" + std::to_string(index) + "/level";
+        const std::string levelText = readTextFile(levelPath);
+        if (levelText.empty()) {
+          continue;
+        }
+        if (std::stoi(levelText) != 3) {
+          continue;
+        }
+
+        const std::string sharedPath = base + "/index" + std::to_string(index) + "/shared_cpu_list";
+        std::string sharedCpuList = readTextFile(sharedPath);
+        sharedCpuList.erase(std::remove(sharedCpuList.begin(), sharedCpuList.end(), '\n'), sharedCpuList.end());
+        if (sharedCpuList.empty() || visitedSharedLists.find(sharedCpuList) != visitedSharedLists.end()) {
+          continue;
+        }
+        visitedSharedLists.insert(sharedCpuList);
+
+        auto cpus = parseCpuRangeList(sharedCpuList);
+        if (!cpus.empty()) {
+          L3Group group;
+          group.logicalCpus = std::move(cpus);
+          groups.emplace_back(std::move(group));
+        }
+      }
+    }
+
+    return groups;
+  }
+
+#ifdef _WIN32
+  static std::vector<unsigned> extractCpuIdsFromMask(ULONG_PTR mask) {
+    std::vector<unsigned> cpus;
+    for (unsigned bit = 0; bit < sizeof(ULONG_PTR) * 8; ++bit) {
+      if ((mask & (static_cast<ULONG_PTR>(1) << bit)) != 0) {
+        cpus.push_back(bit);
+      }
+    }
+    return cpus;
+  }
+
+  static std::vector<L3Group> discoverL3GroupsWindows() {
+    std::vector<L3Group> groups;
+    DWORD length = 0;
+    GetLogicalProcessorInformation(nullptr, &length);
+    if (length == 0) {
+      return groups;
+    }
+
+    std::vector<uint8_t> buffer(length);
+    auto* info = reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION*>(buffer.data());
+    if (!GetLogicalProcessorInformation(info, &length)) {
+      return groups;
+    }
+
+    const size_t count = length / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
+    for (size_t i = 0; i < count; ++i) {
+      const auto& entry = info[i];
+      if (entry.Relationship != RelationCache) {
+        continue;
+      }
+      if (entry.Cache.Level != 3) {
+        continue;
+      }
+
+      auto cpus = extractCpuIdsFromMask(entry.ProcessorMask);
+      if (!cpus.empty()) {
+        L3Group group;
+        group.logicalCpus = std::move(cpus);
+        groups.emplace_back(std::move(group));
+      }
+    }
+
+    return groups;
+  }
+#endif
+
+  static L3Group fallbackGroup() {
+    L3Group fallback;
+    const unsigned count = std::max(1u, std::thread::hardware_concurrency());
+    fallback.logicalCpus.reserve(count);
+    for (unsigned i = 0; i < count; ++i) {
+      fallback.logicalCpus.push_back(i);
+    }
+    return fallback;
+  }
+
+  void pinCurrentThread(size_t groupIndex, size_t cpuIndexInGroup) {
+    if (groupIndex >= m_groups.size()) {
+      return;
+    }
+    const auto& cpus = m_groups[groupIndex].logicalCpus;
+    if (cpus.empty()) {
+      return;
+    }
+
+    const unsigned cpuId = cpus[cpuIndexInGroup % cpus.size()];
+
+#ifdef _WIN32
+    const DWORD_PTR affinityMask = (static_cast<DWORD_PTR>(1) << cpuId);
+    SetThreadAffinityMask(GetCurrentThread(), affinityMask);
+#else
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(cpuId, &cpuset);
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+#endif
+  }
+
+  bool tryPopFromGroup(size_t groupIndex, Task& task) {
+    if (groupIndex >= m_groups.size()) {
+      return false;
+    }
+
+    auto& group = m_groups[groupIndex];
+    std::lock_guard<std::mutex> lock(group.queueMutex);
+    if (group.queue.empty()) {
+      return false;
+    }
+    task = std::move(group.queue.front());
+    group.queue.pop_front();
+    return true;
+  }
+
+  bool tryStealCrossL3(size_t localGroupIndex, Task& task) {
+    const size_t groupCount = m_groups.size();
+    if (groupCount <= 1) {
+      return false;
+    }
+
+    for (size_t offset = 1; offset < groupCount; ++offset) {
+      const size_t remoteGroup = (localGroupIndex + offset) % groupCount;
+      if (tryPopFromGroup(remoteGroup, task)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void workerLoop(size_t localGroupIndex) {
+    while (!m_stopping.load(std::memory_order_acquire)) {
+      Task task;
+
+      if (tryPopFromGroup(localGroupIndex, task)) {
+        task();
+        continue;
+      }
+
+      if (tryStealCrossL3(localGroupIndex, task)) {
+        task();
+        continue;
+      }
+
+      std::unique_lock<std::mutex> lock(m_cvMutex);
+      m_cv.wait_for(lock, std::chrono::milliseconds(1), [this]() {
+        return m_stopping.load(std::memory_order_acquire);
+      });
+    }
+  }
+};
 
 int detectLogicalCoreType() {
 #ifdef _WIN32
