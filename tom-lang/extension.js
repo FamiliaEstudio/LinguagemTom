@@ -11,8 +11,7 @@ const vectorOpRegex = /^(Somar|Subtr|Multi|Divid)Vec4(In|Fl)(32|64)x/;
 
 // --- Regex das Pistas de Execução (Lanes) ---
 // CPU: Operações lógicas, matemáticas e controle de fluxo
-const cpuRegex = /^(Somar|Subtr|Multi|Divid|SeMaior|SetVar|DefVar|Escopo|DefTxt|SetTxt|SomarTxt|Somarl|LerEntrada).*$/;
-// GPU: Comandos de despacho e configuração de kernel
+const cpuRegex = /^(Somar|Subtr|Multi|Divid|SeMaior|SetVar|DefVar|Escopo|DefTxt|SetTxt|SomarTxt|Somarl|LerEntrada|DefStk|DefBudget|DefPrioridade).*$/;// GPU: Comandos de despacho e configuração de kernel
 const gpuRegex = /^(GpuDisp|GpuDispAsync|DefKernel|GpuIdObt|GpuLer|GpuEscr|FimDef|GpuBufCriar).*$/;
 // Transferência: Uploads/Downloads (Gargalos)
 const transferRegex = /^(GpuEnv|GpuRec|GpuApresentar).*$/;
@@ -43,17 +42,17 @@ function activate(context) {
   // 2. Novas Decorações: Pistas de Execução (Lanes)
   const cpuLaneDecoration = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: 'rgba(65, 105, 225, 0.05)', // Azul muito suave
+    backgroundColor: 'rgba(65, 105, 225, 0.4)', // Azul muito suave
   });
 
   const gpuLaneDecoration = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: 'rgba(50, 205, 50, 0.05)', // Verde muito suave
+    backgroundColor: 'rgba(50, 205, 50, 0.4)', // Verde muito suave
   });
 
   const transferLaneDecoration = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: 'rgba(255, 165, 0, 0.1)', // Laranja suave (alerta)
+    backgroundColor: 'rgba(255, 165, 0, 0.4)', // Laranja suave (alerta)
   });
 
   // 3. Nova Decoração: Fence (Barreira)
@@ -262,6 +261,6 @@ function activate(context) {
   refreshActive();
 }
 
-function deactivate() {}
+function deactivate() { }
 
 module.exports = { activate, deactivate };
