@@ -6,7 +6,7 @@ DefVarInSd32xDoisy2
 DefVarInSd32xCorBrancay16777215
 
 GpuBufCriarIn32x64000yBufTela
-GpuBufCriarIn32x8yInputBuf
+GpuBufCriarIn32x300yInputBuf
 
 EscopoInixLoopPaint
 GpuLerInputIn32xBufferDestinoxInputBuf
