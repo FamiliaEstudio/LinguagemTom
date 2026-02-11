@@ -11,6 +11,192 @@ const rawLines = sourceCode
 
 let lines = rawLines;
 
+const SUPPORTED_TARGET_DECORATORS = new Set(['cpu', 'gpu', 'auto']);
+
+function parseTomType(typeRaw) {
+  const text = String(typeRaw || '').trim();
+  const bufferType = text.match(/^Buffer<([A-Za-z_][A-Za-z0-9_]*)>$/);
+  if (bufferType) {
+    return {
+      kind: 'buffer',
+      name: 'Buffer',
+      elementType: bufferType[1],
+      shape: {
+        rank: 1,
+        layout: 'linear',
+      },
+      source: text,
+    };
+  }
+
+  return {
+    kind: 'scalar',
+    name: text,
+    source: text,
+  };
+}
+
+function splitFunctionParams(paramsRaw) {
+  const params = [];
+  let token = '';
+  let depth = 0;
+
+  for (const char of paramsRaw) {
+    if (char === '<') depth += 1;
+    if (char === '>') depth = Math.max(0, depth - 1);
+
+    if (char === ',' && depth === 0) {
+      if (token.trim()) params.push(token.trim());
+      token = '';
+      continue;
+    }
+
+    token += char;
+  }
+
+  if (token.trim()) params.push(token.trim());
+  return params;
+}
+
+function parseFunctionParams(paramsRaw) {
+  if (!paramsRaw || !paramsRaw.trim()) return [];
+  const params = splitFunctionParams(paramsRaw);
+  return params.map((paramRaw) => {
+    const match = paramRaw.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$/);
+    if (!match) {
+      return {
+        name: paramRaw.trim(),
+        type: parseTomType('Desconhecido'),
+      };
+    }
+
+    const [, name, typeRaw] = match;
+    return {
+      name,
+      type: parseTomType(typeRaw),
+    };
+  });
+}
+
+function parseAgnosticInstruction(line) {
+  const mathScalar = line.match(/^(Somar|Subtr|Multi|Divid)(Fl|In)(32|64)x(@?[A-Za-z_][A-Za-z0-9_]*)y(@?[A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (mathScalar) {
+    const [, op, typePrefix, bits, leftRaw, rightRaw, outVar] = mathScalar;
+    return {
+      op: 'OpAddSubMulDiv',
+      kind: op,
+      scalarType: `${typePrefix}${bits}`,
+      left: leftRaw.replace(/^@/, ''),
+      right: rightRaw.replace(/^@/, ''),
+      out: outVar,
+    };
+  }
+
+  const loadScalar = line.match(/^GpuLer(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (loadScalar) {
+    const [, typePrefix, bits, bufferName, indexVar, outVar] = loadScalar;
+    return {
+      op: 'OpLoad',
+      scalarType: `${typePrefix}${bits}`,
+      buffer: bufferName,
+      index: indexVar,
+      out: outVar,
+    };
+  }
+
+  const storeScalar = line.match(/^GpuEscr(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (storeScalar) {
+    const [, typePrefix, bits, bufferName, indexVar, inVar] = storeScalar;
+    return {
+      op: 'OpStore',
+      scalarType: `${typePrefix}${bits}`,
+      buffer: bufferName,
+      index: indexVar,
+      in: inVar,
+    };
+  }
+
+  return {
+    op: 'OpRaw',
+    source: line,
+  };
+}
+
+function parseFunctionAst(programLines) {
+  const ast = [];
+  const passthroughLines = [];
+  let pendingTargetDecorator = null;
+  let currentFunction = null;
+
+  for (const line of programLines) {
+    const decorator = line.match(/^@(cpu|gpu|auto)$/);
+    if (decorator) {
+      pendingTargetDecorator = decorator[1];
+      continue;
+    }
+
+    const fnStart = line.match(/^DefFuncaox([A-Za-z_][A-Za-z0-9_]*)(?:\[(.*)\])?$/);
+    if (fnStart) {
+      const [, name, paramsRaw = ''] = fnStart;
+      currentFunction = {
+        kind: 'DefFuncao',
+        name,
+        params: parseFunctionParams(paramsRaw),
+        decorators: pendingTargetDecorator ? [`@${pendingTargetDecorator}`] : [],
+        target: pendingTargetDecorator || 'auto',
+        body: [],
+      };
+      pendingTargetDecorator = null;
+      ast.push(currentFunction);
+      continue;
+    }
+
+    if (line === 'FimFuncao') {
+      currentFunction = null;
+      continue;
+    }
+
+    if (currentFunction) {
+      currentFunction.body.push(line);
+      continue;
+    }
+
+    passthroughLines.push(line);
+  }
+
+  return {
+    ast,
+    passthroughLines,
+  };
+}
+
+function lowerAstToTomIr(functionAst) {
+  return functionAst.map((fnNode) => ({
+    kind: 'TomIR_Function',
+    metadata: {
+      name: fnNode.name,
+      decorators: [...fnNode.decorators],
+      params: fnNode.params.map((param) => ({
+        name: param.name,
+        type: { ...param.type },
+      })),
+      shape: fnNode.params.map((param) => ({
+        param: param.name,
+        type: param.type.kind,
+        elementType: param.type.elementType || param.type.name,
+        rank: param.type.shape ? param.type.shape.rank : 0,
+      })),
+    },
+    instructions: fnNode.body.map((line) => parseAgnosticInstruction(line)),
+    target: SUPPORTED_TARGET_DECORATORS.has(fnNode.target) ? fnNode.target : 'auto',
+  }));
+}
+
+const parsedFunctions = parseFunctionAst(rawLines);
+const functionAst = parsedFunctions.ast;
+const tomIrFunctions = lowerAstToTomIr(functionAst);
+lines = parsedFunctions.passthroughLines;
+
 function buildReuseAnalysis(programLines) {
   const lastMentionByVar = new Map();
 
@@ -2514,11 +2700,20 @@ if (gpuManifest) {
   fs.writeFileSync(gpuManifestPath, `${JSON.stringify(gpuManifest, null, 2)}\n`);
 }
 
+const tirOutputPath = path.join(path.dirname(inputFile), 'output.tir.json');
+const tirPayload = {
+  version: 1,
+  sourceFile: path.basename(inputFile),
+  functions: tomIrFunctions,
+};
+fs.writeFileSync(tirOutputPath, `${JSON.stringify(tirPayload, null, 2)}\n`);
+
 console.log(`Compilação concluída para '${inputFile}'. Arquivo '${outputPath}' gerado.`);
 console.log(`Saída MLIR gerada em '${mlirOutputPath}'.`);
 if (gpuManifest) {
   console.log(`Manifesto backend GPU gerado em '${gpuManifestPath}'.`);
 }
+console.log(`Saída TIR gerada em '${tirOutputPath}'.`);
 
 if (budgetState.frameTargetFps || budgetState.systems.length || budgetState.priorities.length) {
   console.log('\nTom Live Budget (base híbrida):');
