@@ -405,6 +405,61 @@ function parseSoaPropertyAccess(raw) {
   return { instanceName, indexRaw, propertyName };
 }
 
+function parseDefArraySoA(line) {
+  const match = line.match(/^DefArraySoAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)x(\d+)$/);
+  if (!match) return null;
+  const [, instanceName, structName, countRaw] = match;
+  return { instanceName, structName, countRaw };
+}
+
+function parseGetVarSoA(line) {
+  const match = line.match(/^GetVarx([A-Za-z_][A-Za-z0-9_]*)xIndex(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+)x([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (!match) return null;
+
+  const [, instanceName, indexRaw, propertyName] = match;
+  return {
+    instanceName,
+    indexRaw,
+    propertyName,
+  };
+}
+
+function allocateSoAInstance(structName, instanceName, countRaw, sourceCommand) {
+  const structDef = structDefinitions.get(structName);
+  if (!structDef) {
+    createError(`${sourceCommand} falhou: struct '${structName}' não foi definida.`);
+    return true;
+  }
+
+  if (soaVars.has(instanceName)) {
+    createError(`${sourceCommand} duplicado para instância '${instanceName}'.`);
+    return true;
+  }
+
+  const count = Number.parseInt(countRaw, 10);
+  if (!Number.isInteger(count) || count <= 0) {
+    createError(`${sourceCommand} inválido: quantidade '${countRaw}'.`);
+    return true;
+  }
+
+  const propPointers = new Map();
+  for (const prop of structDef.props) {
+    const ptrName = `%${instanceName}_${prop.name}`;
+    emitInstruction(`${ptrName} = alloca [${count} x ${prop.type}]`);
+    propPointers.set(prop.name, {
+      ptr: ptrName,
+      llvmType: prop.type,
+    });
+  }
+
+  soaVars.set(instanceName, {
+    structName,
+    count,
+    propPointers,
+  });
+  return true;
+}
+
 function resolveSoaIndex(indexRaw, count) {
   if (indexRaw.startsWith('@')) {
     const indexVarName = indexRaw.slice(1);
@@ -1211,6 +1266,31 @@ function allocateNumericStorage(name, llvmType, value) {
 }
 
 function emitDataOperation(line) {
+  const defArraySoA = parseDefArraySoA(line);
+  if (defArraySoA) {
+    const { structName, instanceName, countRaw } = defArraySoA;
+    return allocateSoAInstance(structName, instanceName, countRaw, 'DefArraySoA');
+  }
+
+  const getVarSoA = parseGetVarSoA(line);
+  if (getVarSoA) {
+    const access = `${getVarSoA.instanceName}@${getVarSoA.indexRaw}.${getVarSoA.propertyName}`;
+    const soaPointer = resolveSoaPropertyPointer(access);
+    if (!soaPointer) {
+      createError(`GetVar inválido: ${line}`);
+      return true;
+    }
+    if (soaPointer.error) {
+      createError(soaPointer.error);
+      return true;
+    }
+
+    const loaded = nextReg();
+    emitInstruction(`${loaded} = load ${soaPointer.llvmType}, ${soaPointer.llvmType}* ${soaPointer.ptr}`);
+    lastNumericValue = { reg: loaded, llvmType: soaPointer.llvmType };
+    return true;
+  }
+
   const soaVecAdd = line.match(/^ParaCadaSOAx([A-Za-z_][A-Za-z0-9_]*)xSomar([A-Za-z_][A-Za-z0-9_]*?)(-?\d+)$/);
   if (soaVecAdd) {
     const [, instanceName, propertyName, amountRaw] = soaVecAdd;
@@ -1320,39 +1400,7 @@ function emitDataOperation(line) {
     || line.match(/^AlocSOAx([A-Za-z_][A-Za-z0-9_]*)x([A-Za-z_][A-Za-z0-9_]*)x(\d+)$/);
   if (allocSoa) {
     const [, structName, instanceName, countRaw] = allocSoa;
-    const structDef = structDefinitions.get(structName);
-    if (!structDef) {
-      createError(`AlocSOA falhou: struct '${structName}' não foi definida.`);
-      return true;
-    }
-
-    if (soaVars.has(instanceName)) {
-      createError(`AlocSOA duplicado para instância '${instanceName}'.`);
-      return true;
-    }
-
-    const count = Number.parseInt(countRaw, 10);
-    if (!Number.isInteger(count) || count <= 0) {
-      createError(`AlocSOA inválido: quantidade '${countRaw}' em ${line}`);
-      return true;
-    }
-
-    const propPointers = new Map();
-    for (const prop of structDef.props) {
-      const ptrName = `%${instanceName}_${prop.name}`;
-      emitInstruction(`${ptrName} = alloca [${count} x ${prop.type}]`);
-      propPointers.set(prop.name, {
-        ptr: ptrName,
-        llvmType: prop.type,
-      });
-    }
-
-    soaVars.set(instanceName, {
-      structName,
-      count,
-      propPointers,
-    });
-    return true;
+    return allocateSoAInstance(structName, instanceName, countRaw, 'AlocSOA');
   }
 
   const decl = line.match(/^DefVar(In)(Sd|Ud)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([^\s]+)$/);
