@@ -18,7 +18,7 @@
         },
         {
             "comment": "2. Comandos (Somar, GpuDisp, GpuFence...) - SEM \\b no final para aceitar colado",
-            "match": "\\b(Somarl|Somar|Subtr|Multi|Divid|GerarTxt|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefVar|SetVar|LerEntrada|DefTxt|SetTxt|SomarTxt|DefZn|DefKernel|FimDef|DefBudgetFrame|DefBudgetSistema|DefPrioridade|DefPrioridad|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDispAsync|GpuDisp|GpuFence|AguardarGpu|GpuRec|GpuApresentar|SEProv|SEImpr)",
+            "match": "\\b(Somarl|Somar|Subtr|Multi|Divid|GerarTxt|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefVar|SetVar|LerEntrada|DefTxt|SetTxt|SomarTxt|DefZn|DefKernel|FimDef|DefBudgetFrame|DefBudgetSistema|DefPrioridade|DefPrioridad|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuDispAsync|GpuRec|GpuApresentar|GpuFence|AguardarGpu|SEProv|SEImpr)",
             "name": "keyword.control.tom"
         },
         {

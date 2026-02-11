@@ -1236,11 +1236,29 @@ function emitGpuOperation(line) {
     return true;
   }
 
-  const dispatch = line.match(/^GpuDisp(Async)?x([A-Za-z_][A-Za-z0-9_]*)x(\d+)y(\d+)z(\d+)$/);
-  if (dispatch) {
-    const [, asyncSuffix, kernelName, xRaw, yRaw, zRaw] = dispatch;
+  const dispatchAsync = line.match(/^GpuDispAsyncx([A-Za-z_][A-Za-z0-9_]*)x(\d+)y(\d+)z(\d+)$/);
+  if (dispatchAsync) {
+    const [, kernelName, xRaw, yRaw, zRaw] = dispatchAsync;
     const dims = [xRaw, yRaw, zRaw].map((value) => Number.parseInt(value, 10));
-    const isAsync = Boolean(asyncSuffix);
+    if (dims.some((value) => !Number.isInteger(value) || value <= 0)) {
+      createError(`GpuDispAsync inválido: dimensões devem ser inteiros positivos (${line}).`);
+      return true;
+    }
+
+    if (!gpuState.kernels.has(kernelName)) {
+      createError(`GpuDispAsync falhou: kernel '${kernelName}' não foi definido.`);
+      return true;
+    }
+
+    gpuState.dispatches.push({ kernelName, x: dims[0], y: dims[1], z: dims[2], async: true });
+    emitInstruction(`; TOM_GPU_DISPATCH_ASYNC kernel=${kernelName} x=${dims[0]} y=${dims[1]} z=${dims[2]}`);
+    return true;
+  }
+
+  const dispatch = line.match(/^GpuDispx([A-Za-z_][A-Za-z0-9_]*)x(\d+)y(\d+)z(\d+)$/);
+  if (dispatch) {
+    const [, kernelName, xRaw, yRaw, zRaw] = dispatch;
+    const dims = [xRaw, yRaw, zRaw].map((value) => Number.parseInt(value, 10));
     if (dims.some((value) => !Number.isInteger(value) || value <= 0)) {
       createError(`GpuDisp inválido: dimensões devem ser inteiros positivos (${line}).`);
       return true;
@@ -1251,8 +1269,8 @@ function emitGpuOperation(line) {
       return true;
     }
 
-    gpuState.dispatches.push({ kernelName, x: dims[0], y: dims[1], z: dims[2], async: isAsync });
-    emitInstruction(`; TOM_GPU_DISPATCH kernel=${kernelName} x=${dims[0]} y=${dims[1]} z=${dims[2]} async=${isAsync ? 1 : 0}`);
+    gpuState.dispatches.push({ kernelName, x: dims[0], y: dims[1], z: dims[2], async: false });
+    emitInstruction(`; TOM_GPU_DISPATCH kernel=${kernelName} x=${dims[0]} y=${dims[1]} z=${dims[2]}`);
     return true;
   }
 

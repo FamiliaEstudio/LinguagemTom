@@ -1,17 +1,24 @@
 const vscode = require('vscode');
 
+// --- Regex do Live Budget ---
 const frameRegex = /^DefBudgetFramexyTargetFPSy(\d+)$/;
 const systemRegex = /^DefBudgetSistemax([A-Za-z_][A-Za-z0-9_]*)yMaxMsy(-?\d+(?:\.\d+)?)$/;
 const priorityRegex = /^DefPrioridadex([A-Za-z_][A-Za-z0-9_]*)y(-?\d+)$/;
-const cpuLaneRegex = /^(Somar|Subtr|Multi|Divid|SeMaior|SetVar|DefVar|Escopo).*/;
-const gpuLaneRegex = /^(GpuDispAsync|GpuDisp|DefKernel|GpuIdObt|GpuLer|GpuEscr|FimDef).*/;
-const transferLaneRegex = /^(GpuEnv|GpuRec|GpuBufCriar|GpuApresentar).*/;
-const fenceRegex = /^(GpuFence|AguardarGpu)$/;
-
 const scopeStartRegex = /^EscopoInix([A-Za-z_][A-Za-z0-9_]*)$/;
 const scopeEndRegex = /^EscopoFimx([A-Za-z_][A-Za-z0-9_]*)$/;
 const numericOpRegex = /^(Somar|Subtr|Multi|Divid)xy(In|Fl)(Sd|Ud)?(32|64)x/;
 const vectorOpRegex = /^(Somar|Subtr|Multi|Divid)Vec4(In|Fl)(32|64)x/;
+
+// --- Regex das Pistas de Execução (Lanes) ---
+// CPU: Operações lógicas, matemáticas e controle de fluxo
+const cpuRegex = /^(Somar|Subtr|Multi|Divid|SeMaior|SetVar|DefVar|Escopo|DefTxt|SetTxt|SomarTxt|Somarl|LerEntrada).*$/;
+// GPU: Comandos de despacho e configuração de kernel
+const gpuRegex = /^(GpuDisp|GpuDispAsync|DefKernel|GpuIdObt|GpuLer|GpuEscr|FimDef|GpuBufCriar).*$/;
+// Transferência: Uploads/Downloads (Gargalos)
+const transferRegex = /^(GpuEnv|GpuRec|GpuApresentar).*$/;
+// Fence: Barreiras de sincronia
+const fenceRegex = /^(GpuFence|AguardarGpu|Sincronizar).*$/;
+
 const TOMCYCLES_PER_MS = 1000;
 const OP_COSTS = {
   Somar: 1,
@@ -24,89 +31,52 @@ const OP_COSTS = {
   DividVec4: 120,
 };
 
-
 function activate(context) {
+  // 1. Decorações do Live Budget (Existente)
   const diagnostics = vscode.languages.createDiagnosticCollection('tom-live-budget');
   const budgetDecoration = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
     overviewRulerColor: new vscode.ThemeColor('charts.green'),
     overviewRulerLane: vscode.OverviewRulerLane.Right,
   });
+
+  // 2. Novas Decorações: Pistas de Execução (Lanes)
   const cpuLaneDecoration = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: 'rgba(65, 105, 225, 0.05)',
+    backgroundColor: 'rgba(65, 105, 225, 0.05)', // Azul muito suave
   });
+
   const gpuLaneDecoration = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: 'rgba(50, 205, 50, 0.05)',
+    backgroundColor: 'rgba(50, 205, 50, 0.05)', // Verde muito suave
   });
+
   const transferLaneDecoration = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
-    backgroundColor: 'rgba(255, 165, 0, 0.1)',
+    backgroundColor: 'rgba(255, 165, 0, 0.1)', // Laranja suave (alerta)
   });
+
+  // 3. Nova Decoração: Fence (Barreira)
   const fenceDecoration = vscode.window.createTextEditorDecorationType({
     isWholeLine: true,
-    borderWidth: '0 0 2px 0',
+    borderWidth: '0 0 2px 0', // Borda apenas embaixo
+    borderColor: '#FF4500', // Vermelho alaranjado sólido
     borderStyle: 'solid',
-    borderColor: '#FF0000',
+    overviewRulerColor: '#FF4500',
+    overviewRulerLane: vscode.OverviewRulerLane.Full,
   });
 
-  const updateLanes = (editor) => {
-    if (!editor || editor.document.languageId !== 'tom') return;
+  const refresh = (document) => {
+    if (!document || document.languageId !== 'tom') return;
 
+    // Listas de ranges para aplicar as cores
+    const budgetRanges = [];
     const cpuRanges = [];
     const gpuRanges = [];
     const transferRanges = [];
     const fenceRanges = [];
 
-    for (let index = 0; index < editor.document.lineCount; index += 1) {
-      const line = editor.document.lineAt(index);
-      const text = line.text.trim();
-      if (!text) continue;
-
-      if (fenceRegex.test(text)) {
-        fenceRanges.push(line.range);
-        continue;
-      }
-
-      if (transferLaneRegex.test(text)) {
-        transferRanges.push(line.range);
-        continue;
-      }
-
-      if (gpuLaneRegex.test(text)) {
-        gpuRanges.push(line.range);
-        continue;
-      }
-
-      if (cpuLaneRegex.test(text)) {
-        cpuRanges.push(line.range);
-      }
-    }
-
-    editor.setDecorations(cpuLaneDecoration, cpuRanges);
-    editor.setDecorations(gpuLaneDecoration, gpuRanges);
-    editor.setDecorations(transferLaneDecoration, transferRanges);
-    editor.setDecorations(fenceDecoration, fenceRanges);
-  };
-
-  const updateLanesByDocument = (document) => {
-    if (!document || document.languageId !== 'tom') return;
-
-    const visibleEditors = vscode.window.visibleTextEditors.filter(
-      (editor) => editor.document.uri.toString() === document.uri.toString(),
-    );
-
-    for (const editor of visibleEditors) {
-      updateLanes(editor);
-    }
-  };
-
-  const refresh = (document) => {
-    if (!document || document.languageId !== 'tom') return;
-
     const docDiagnostics = [];
-    const decorationRanges = [];
     const systemNames = new Set();
     const systemLimits = new Map();
     const scopeStack = [];
@@ -117,7 +87,20 @@ function activate(context) {
       const text = line.text.trim();
       if (!text) continue;
 
+      // --- Lógica das Pistas (Visual) ---
+      if (fenceRegex.test(text)) {
+        fenceRanges.push(line.range);
+      } else if (transferRegex.test(text)) {
+        transferRanges.push(line.range);
+      } else if (gpuRegex.test(text)) {
+        gpuRanges.push(line.range);
+      } else if (cpuRegex.test(text)) {
+        cpuRanges.push(line.range);
+      }
+
+      // --- Lógica do Live Budget ---
       let hover;
+
       const frame = text.match(frameRegex);
       if (frame) {
         const fps = Number.parseInt(frame[1], 10);
@@ -186,7 +169,6 @@ function activate(context) {
         hover = `📌 Tom Live Budget: prioridade ${name} = ${level}`;
       }
 
-
       const scopeStart = text.match(scopeStartRegex);
       if (scopeStart) {
         scopeStack.push(scopeStart[1]);
@@ -234,12 +216,12 @@ function activate(context) {
       }
 
       if (hover) {
-        decorationRanges.push({
+        budgetRanges.push({
           range: line.range,
           hoverMessage: hover,
           renderOptions: {
             after: {
-              contentText: '  ← Tom Live Budget',
+              contentText: '  ← Tom Budget',
               color: new vscode.ThemeColor('descriptionForeground'),
             },
           },
@@ -247,24 +229,22 @@ function activate(context) {
       }
     }
 
-    diagnostics.set(document.uri, docDiagnostics);
-
-    const visibleEditors = vscode.window.visibleTextEditors.filter(
-      (editor) => editor.document.uri.toString() === document.uri.toString(),
-    );
-
-    for (const editor of visibleEditors) {
-      editor.setDecorations(budgetDecoration, decorationRanges);
+    // Aplica as decorações
+    const editor = vscode.window.activeTextEditor;
+    if (editor && editor.document === document) {
+      editor.setDecorations(budgetDecoration, budgetRanges);
+      editor.setDecorations(cpuLaneDecoration, cpuRanges);
+      editor.setDecorations(gpuLaneDecoration, gpuRanges);
+      editor.setDecorations(transferLaneDecoration, transferRanges);
+      editor.setDecorations(fenceDecoration, fenceRanges);
     }
+
+    diagnostics.set(document.uri, docDiagnostics);
   };
 
-  const refreshVisibleTomEditors = () => {
-    for (const editor of vscode.window.visibleTextEditors) {
-      if (editor.document.languageId === 'tom') {
-        refresh(editor.document);
-        updateLanes(editor);
-      }
-    }
+  const refreshActive = () => {
+    const editor = vscode.window.activeTextEditor;
+    if (editor) refresh(editor.document);
   };
 
   context.subscriptions.push(
@@ -274,24 +254,14 @@ function activate(context) {
     gpuLaneDecoration,
     transferLaneDecoration,
     fenceDecoration,
-    vscode.workspace.onDidOpenTextDocument((document) => {
-      refresh(document);
-      updateLanesByDocument(document);
-    }),
-    vscode.workspace.onDidChangeTextDocument((event) => {
-      refresh(event.document);
-      updateLanesByDocument(event.document);
-    }),
-    vscode.workspace.onDidCloseTextDocument((document) => diagnostics.delete(document.uri)),
-    vscode.window.onDidChangeVisibleTextEditors(refreshVisibleTomEditors),
+    vscode.workspace.onDidOpenTextDocument(refresh),
+    vscode.workspace.onDidChangeTextDocument((e) => refresh(e.document)),
+    vscode.window.onDidChangeVisibleTextEditors(refreshActive),
   );
 
-  refreshVisibleTomEditors();
+  refreshActive();
 }
 
 function deactivate() {}
 
-module.exports = {
-  activate,
-  deactivate,
-};
+module.exports = { activate, deactivate };
