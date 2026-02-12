@@ -69,7 +69,7 @@ escopo_MainLoop_ini_1:
   %r15 = load i32, i32* %r1
   %r16 = load i32, i32* %r2
   call void @TomGpu_Present(i32* %r9, i32 %r15, i32 %r16)
-  br label %escopo_MainLoop_fim_2
+  br label %escopo_MainLoop_ini_1
 escopo_MainLoop_fim_2:
   %tom_budget_cycle_end = call i64 @llvm.readcyclecounter()
   %tom_budget_cycle_elapsed = sub i64 %tom_budget_cycle_end, %tom_budget_cycle_start
