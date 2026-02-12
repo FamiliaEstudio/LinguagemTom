@@ -947,6 +947,23 @@ void main() {
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, bufferIt->second.ssbo);
     const GLsizeiptr readSize = static_cast<GLsizeiptr>(std::min(bytesNeeded, bufferIt->second.byteSize));
     glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, readSize, pixels.data());
+    // --- INÍCIO DO BLOCO DE DEBUG ---
+    if (!pixels.empty()) {
+      // 1. Imprime o valor do primeiro pixel (para saber se a GPU escreveu algo)
+      // Se imprimir 0, a GPU falhou. Se imprimir -1 ou FFFFFFFF, a GPU funcionou.
+      static int debugCounter = 0;
+      if (debugCounter++ % 60 == 0) { // Imprime 1 vez por segundo
+          std::cout << "DEBUG: Pixel[0] = " << std::hex << pixels[0] << std::dec << std::endl;
+      }
+
+      // 2. FORÇA BRUTA: Pinta a tela de Branco (Roxo) manualmente na CPU
+      // Isso prova se o problema é na janela/textura.
+      // Se a tela ficar roxa/branca, o defeito é que a GPU não estava escrevendo.
+      for (auto& p : pixels) {
+          p = 0xFF00FFFF; // Roxo Opaco (AABBGGRR)
+      }
+    }
+    // --- FIM DO BLOCO DE DEBUG ---
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
     glBindTexture(GL_TEXTURE_2D, g_presentTexture);
