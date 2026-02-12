@@ -2108,6 +2108,7 @@ function emitGlslFromTir(funcTIR) {
 function buildGlslKernelSource(kernel, buffersByName) {
   const glsl = [];
   const varTypes = new Map();
+  const numericLiteralPattern = /^-?\d+(?:\.\d+)?$/;
   const declaredBuffers = new Set();
   const unsupported = [];
   const pushConstants = new Map();
@@ -2134,6 +2135,7 @@ function buildGlslKernelSource(kernel, buffersByName) {
 
   function coerceSymbol(symbol, expectedType, fallbackType = 'int') {
     if (!symbol) return symbol;
+    if (numericLiteralPattern.test(symbol)) return symbol;
     const knownType = varTypes.get(symbol);
     if (knownType) {
       return knownType === expectedType ? symbol : `${expectedType}(${symbol})`;
@@ -3303,6 +3305,8 @@ function emitText(line) {
 }
 
 function emitGpuOperation(line) {
+  const kernelOperandPattern = '(@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(?:\\.\\d+)?)';
+
   const createBuffer = line.match(/^GpuBufCriar(Fl|In)(32|64)x(\d+)y([A-Za-z_][A-Za-z0-9_]*)$/);
   if (createBuffer) {
     const [, typePrefix, bits, countRaw, name] = createBuffer;
@@ -3686,7 +3690,7 @@ function emitGpuOperation(line) {
     return true;
   }
 
-  const kernelMathScalar = line.match(/^(Somar|Subtr|Multi|Divid)(Fl|In)(32|64)x(@?[A-Za-z_][A-Za-z0-9_]*)y(@?[A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  const kernelMathScalar = line.match(new RegExp(`^(Somar|Subtr|Multi|Divid)(Fl|In)(32|64)x${kernelOperandPattern}y${kernelOperandPattern}z([A-Za-z_][A-Za-z0-9_]*)$`));
   if (kernelMathScalar) {
     const [, op, typePrefix, bits, leftRaw, rightRaw, outVar] = kernelMathScalar;
     const leftVar = leftRaw.startsWith('@') ? leftRaw.slice(1) : leftRaw;
@@ -3697,7 +3701,7 @@ function emitGpuOperation(line) {
     return true;
   }
 
-  const kernelSinFl32 = line.match(/^GpuMathSinFl32x(@?[A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  const kernelSinFl32 = line.match(new RegExp(`^GpuMathSinFl32x${kernelOperandPattern}z([A-Za-z_][A-Za-z0-9_]*)$`));
   if (kernelSinFl32) {
     const [, inRaw, outVar] = kernelSinFl32;
     const inVar = inRaw.startsWith('@') ? inRaw.slice(1) : inRaw;
