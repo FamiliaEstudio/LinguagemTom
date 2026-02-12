@@ -738,8 +738,8 @@ function buildReuseAnalysis(programLines) {
   return {
     lastMentionByVar,
     canReuseAt(varName, index) {
-      const lastMention = lastMentionByVar.get(varName);
-      return lastMention === undefined || lastMention < index;
+      // Retornar false desativa a reutilização e impede que variáveis globais sumam
+      return false;
     },
   };
 }

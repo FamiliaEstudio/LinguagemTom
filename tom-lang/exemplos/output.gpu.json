@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "sourceFile": "cybersynth.tom",
+  "generatedAtUtc": "2026-02-12T01:56:18.610Z",
+  "buffers": [
+    {
+      "name": "VideoBuf",
+      "scalarType": "In32",
+      "scalarBits": 32,
+      "count": 64000
+    },
+    {
+      "name": "AudioBuf",
+      "scalarType": "Fl32",
+      "scalarBits": 32,
+      "count": 2048
+    },
+    {
+      "name": "InputBuf",
+      "scalarType": "In32",
+      "scalarBits": 32,
+      "count": 300
+    }
+  ],
+  "uploads": [],
+  "downloads": [],
+  "dispatches": [
+    {
+      "kernelName": "SintetizarAudio",
+      "x": 2048,
+      "y": 1,
+      "z": 1,
+      "async": false
+    },
+    {
+      "kernelName": "PlasmaVideo",
+      "x": 64000,
+      "y": 1,
+      "z": 1,
+      "async": false
+    }
+  ],
+  "fences": [],
+  "kernels": [
+    {
+      "name": "SintetizarAudio",
+      "opCount": 8,
+      "ops": [
+        {
+          "kind": "id",
+          "idVar": "SampleId"
+        },
+        {
+          "kind": "load_scalar",
+          "scalarType": "In32",
+          "bufferName": "InputBuf",
+          "indexVar": "Um",
+          "outVar": "MouseY"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Multi",
+          "scalarType": "Fl32",
+          "leftVar": "SampleId",
+          "rightVar": "0.1",
+          "outVar": "Base"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Multi",
+          "scalarType": "Fl32",
+          "leftVar": "MouseY",
+          "rightVar": "0.01",
+          "outVar": "FreqMod"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Somar",
+          "scalarType": "Fl32",
+          "leftVar": "Base",
+          "rightVar": "FreqMod",
+          "outVar": "Fase"
+        },
+        {
+          "kind": "sin_scalar",
+          "scalarType": "Fl32",
+          "inVar": "Fase",
+          "outVar": "Sinal"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Multi",
+          "scalarType": "Fl32",
+          "leftVar": "Sinal",
+          "rightVar": "0.5",
+          "outVar": "Amostra"
+        },
+        {
+          "kind": "store_scalar",
+          "scalarType": "Fl32",
+          "bufferName": "AudioBuf",
+          "indexVar": "SampleId",
+          "inVar": "Amostra"
+        }
+      ],
+      "backends": {
+        "glsl_compute": {
+          "entryPoint": "main",
+          "shaderStage": "compute",
+          "language": "GLSL",
+          "glslVersion": 460,
+          "localSize": {
+            "x": 64,
+            "y": 1,
+            "z": 1
+          },
+          "requiredExtensions": [],
+          "bufferBindings": [
+            {
+              "name": "VideoBuf",
+              "binding": 0,
+              "scalarType": "In32",
+              "glslType": "int"
+            },
+            {
+              "name": "AudioBuf",
+              "binding": 1,
+              "scalarType": "Fl32",
+              "glslType": "float"
+            },
+            {
+              "name": "InputBuf",
+              "binding": 2,
+              "scalarType": "In32",
+              "glslType": "int"
+            }
+          ],
+          "pushConstants": [
+            {
+              "name": "Um",
+              "glslType": "uint"
+            }
+          ],
+          "source": "#version 460\n\nlayout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n\nlayout(std430, binding = 0) buffer TomBuf_VideoBuf { int data[]; } VideoBuf;\nlayout(std430, binding = 1) buffer TomBuf_AudioBuf { float data[]; } AudioBuf;\nlayout(std430, binding = 2) buffer TomBuf_InputBuf { int data[]; } InputBuf;\n\nlayout(push_constant) uniform TomPushConstants {\n  uint Um;\n} pc;\n\nvoid main() {\n  uint SampleId = gl_GlobalInvocationID.x;\n  int MouseY = InputBuf.data[pc.Um];\n  float Base = float(SampleId) * 0.1;\n  float FreqMod = float(MouseY) * 0.01;\n  float Fase = Base + FreqMod;\n  float Sinal = sin(Fase);\n  float Amostra = Sinal * 0.5;\n  AudioBuf.data[SampleId] = Amostra;\n}",
+          "unsupported": []
+        },
+        "spirv": {
+          "status": "pending",
+          "notes": "Backend SPIR-V será gerado a partir do GLSL/IR neste manifesto."
+        }
+      }
+    },
+    {
+      "name": "PlasmaVideo",
+      "opCount": 11,
+      "ops": [
+        {
+          "kind": "id",
+          "idVar": "PixelId"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Divid",
+          "scalarType": "In32",
+          "leftVar": "PixelId",
+          "rightVar": "TelaW",
+          "outVar": "PixelY"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Multi",
+          "scalarType": "In32",
+          "leftVar": "PixelY",
+          "rightVar": "TelaW",
+          "outVar": "LinhaBase"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Subtr",
+          "scalarType": "In32",
+          "leftVar": "PixelId",
+          "rightVar": "LinhaBase",
+          "outVar": "PixelX"
+        },
+        {
+          "kind": "load_scalar",
+          "scalarType": "In32",
+          "bufferName": "InputBuf",
+          "indexVar": "Zero",
+          "outVar": "MouseX"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Somar",
+          "scalarType": "In32",
+          "leftVar": "PixelX",
+          "rightVar": "MouseX",
+          "outVar": "MovX"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Divid",
+          "scalarType": "In32",
+          "leftVar": "MovX",
+          "rightVar": "Oito",
+          "outVar": "FaixaX"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Divid",
+          "scalarType": "In32",
+          "leftVar": "PixelY",
+          "rightVar": "Oito",
+          "outVar": "FaixaY"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Somar",
+          "scalarType": "In32",
+          "leftVar": "FaixaX",
+          "rightVar": "FaixaY",
+          "outVar": "Plasma"
+        },
+        {
+          "kind": "math_scalar",
+          "op": "Multi",
+          "scalarType": "In32",
+          "leftVar": "Plasma",
+          "rightVar": "CorPasso",
+          "outVar": "CorRGB"
+        },
+        {
+          "kind": "store_scalar",
+          "scalarType": "In32",
+          "bufferName": "VideoBuf",
+          "indexVar": "PixelId",
+          "inVar": "CorRGB"
+        }
+      ],
+      "backends": {
+        "glsl_compute": {
+          "entryPoint": "main",
+          "shaderStage": "compute",
+          "language": "GLSL",
+          "glslVersion": 460,
+          "localSize": {
+            "x": 64,
+            "y": 1,
+            "z": 1
+          },
+          "requiredExtensions": [],
+          "bufferBindings": [
+            {
+              "name": "VideoBuf",
+              "binding": 0,
+              "scalarType": "In32",
+              "glslType": "int"
+            },
+            {
+              "name": "AudioBuf",
+              "binding": 1,
+              "scalarType": "Fl32",
+              "glslType": "float"
+            },
+            {
+              "name": "InputBuf",
+              "binding": 2,
+              "scalarType": "In32",
+              "glslType": "int"
+            }
+          ],
+          "pushConstants": [
+            {
+              "name": "CorPasso",
+              "glslType": "int"
+            },
+            {
+              "name": "Oito",
+              "glslType": "int"
+            },
+            {
+              "name": "TelaW",
+              "glslType": "int"
+            },
+            {
+              "name": "Zero",
+              "glslType": "uint"
+            }
+          ],
+          "source": "#version 460\n\nlayout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n\nlayout(std430, binding = 0) buffer TomBuf_VideoBuf { int data[]; } VideoBuf;\nlayout(std430, binding = 1) buffer TomBuf_AudioBuf { float data[]; } AudioBuf;\nlayout(std430, binding = 2) buffer TomBuf_InputBuf { int data[]; } InputBuf;\n\nlayout(push_constant) uniform TomPushConstants {\n  int CorPasso;\n  int Oito;\n  int TelaW;\n  uint Zero;\n} pc;\n\nvoid main() {\n  uint PixelId = gl_GlobalInvocationID.x;\n  int PixelY = int(PixelId) / pc.TelaW;\n  int LinhaBase = PixelY * pc.TelaW;\n  int PixelX = int(PixelId) - LinhaBase;\n  int MouseX = InputBuf.data[pc.Zero];\n  int MovX = PixelX + MouseX;\n  int FaixaX = MovX / pc.Oito;\n  int FaixaY = PixelY / pc.Oito;\n  int Plasma = FaixaX + FaixaY;\n  int CorRGB = Plasma * pc.CorPasso;\n  VideoBuf.data[PixelId] = CorRGB;\n}",
+          "unsupported": []
+        },
+        "spirv": {
+          "status": "pending",
+          "notes": "Backend SPIR-V será gerado a partir do GLSL/IR neste manifesto."
+        }
+      }
+    }
+  ]
+}
