@@ -200,7 +200,7 @@ function parseAgnosticInstruction(line) {
     };
   }
 
-  const storeScalar = line.match(/^GpuEscr(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z([A-Za-z_][A-Za-z0-9_]*)$/);
+  const storeScalar = line.match(/^GpuEscr(Fl|In)(32|64)x([A-Za-z_][A-Za-z0-9_]*)y([A-Za-z_][A-Za-z0-9_]*)z(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)$/);
   if (storeScalar) {
     const [, typePrefix, bits, bufferName, indexVar, inVar] = storeScalar;
     return {
@@ -2492,7 +2492,7 @@ function emitBudgetDirective(line) {
 }
 
 function emitNumericOperation(line) {
-  const numberOperand = '([A-Za-z_][A-Za-z0-9_]*@(?:@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+)\\.[A-Za-z_][A-Za-z0-9_]*|@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(?:\\.\\d+)?)';
+  const numberOperand = '([A-Za-z_][A-Za-z0-9_]*@(?:@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+)\\.[A-Za-z_][A-Za-z0-9_]*|@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)';
   const mathRegex = new RegExp(`^(Somar|Subtr|Multi|Divid)xy(In)(Sd|Ud)(32|64)x${numberOperand}y${numberOperand}$`);
   const floatRegex = new RegExp(`^(Somar|Subtr|Multi|Divid)xy(Fl)(32|64)x${numberOperand}y${numberOperand}$`);
   const sinRegex = /^GpuMathSinFl32x(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)$/;
@@ -3310,7 +3310,7 @@ function emitText(line) {
 }
 
 function emitGpuOperation(line) {
-  const kernelOperandPattern = '(@?[A-Za-z_][A-Za-z0-9_]*|-?\\d+(?:\\.\\d+)?)';
+  const kernelOperandPattern = '(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+(?:\.\d+)?)';
 
   const createBuffer = line.match(/^GpuBufCriar(Fl|In)(32|64)x(\d+)y([A-Za-z_][A-Za-z0-9_]*)$/);
   if (createBuffer) {

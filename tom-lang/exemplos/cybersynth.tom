@@ -17,7 +17,8 @@ GpuBufCriarIn32x300yInputBuf
 DefKernelxPlasmaVideo
 GpuIdObtIn32xPixelId
 ; Escreve Branco em tudo. Se a tela acender, vencemos.
-GpuEscrIn32xVideoBufyPixelIdzCorBranca
+; Escreve -1 (Branco Opaco) diretamente, ignorando o bug do host
+GpuEscrIn32xVideoBufyPixelIdz-1
 FimDef
 
 EscopoInixMainLoop
