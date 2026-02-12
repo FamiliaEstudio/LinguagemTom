@@ -1958,7 +1958,7 @@ function emitGlslFromTir(funcTIR) {
   const functionName = funcTIR?.metadata?.name || 'TomKernel';
   const params = Array.isArray(funcTIR?.metadata?.params) ? funcTIR.metadata.params : [];
   const instructions = Array.isArray(funcTIR?.instructions) ? funcTIR.instructions : [];
-  const glsl = ['#version 460', ''];
+  const glsl = ['#version 430', ''];
   const unsupported = [];
   const scalarParamTypes = new Map();
   const localSize = { x: 64, y: 1, z: 1 };
@@ -2146,7 +2146,7 @@ function buildGlslKernelSource(kernel, buffersByName) {
     return sourceType === expectedType ? symbol : `${expectedType}(${symbol})`;
   }
 
-  glsl.push('#version 460');
+  glsl.push('#version 430');
   if (intExtRequired) glsl.push('#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require');
   if (float64ExtRequired) glsl.push('#extension GL_ARB_gpu_shader_fp64 : require');
   glsl.push('');
@@ -2370,7 +2370,7 @@ function buildGpuBackendManifest(inputPath) {
           entryPoint: 'main',
           shaderStage: 'compute',
           language: 'GLSL',
-          glslVersion: 460,
+          glslVersion: 430,
           localSize: glsl.localSize,
           requiredExtensions: glsl.requiredExtensions,
           bufferBindings: glsl.bufferBindings,
@@ -3902,7 +3902,7 @@ const tirFunctionsWithBackends = tomIrFunctions.map((func) => {
     ...func,
     backends: {
       glsl_compute: {
-        glslVersion: 460,
+        glslVersion: 430,
         localSize: glslCompute.localSize,
         bufferBindings: glslCompute.bufferBindings,
         pushConstants: glslCompute.pushConstants,
