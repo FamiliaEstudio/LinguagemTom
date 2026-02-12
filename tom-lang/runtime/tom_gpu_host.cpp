@@ -926,51 +926,49 @@ void main() {
     glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
   }
 
-  void renderBufferToScreen(const PresentCommand &cmd)
-  {
-    auto bufferIt = g_gpuBuffers.find(cmd.bufferName);
-    if (bufferIt == g_gpuBuffers.end())
-    {
-      std::cerr << "TomGpu_Apresentar: buffer nao encontrado: " << cmd.bufferName << std::endl;
+  void renderBufferToScreen(const PresentCommand& ignoredCmd) {
+    // --- MODO DE EMERGÊNCIA ATIVADO ---
+    // Ignoramos o comando que veio do script e forçamos os valores
+    std::string bufferName = "VideoBuf";
+    int w = 320;
+    int h = 200;
+
+    // Debug: Provar que a função foi chamada
+    static int frameCount = 0;
+    if (frameCount++ % 60 == 0) {
+      std::cout << "ALIVE: Renderizando frame " << frameCount << std::endl;
+    }
+
+    auto bufferIt = g_gpuBuffers.find(bufferName);
+    if (bufferIt == g_gpuBuffers.end()) {
+      std::cerr << "ERRO FATAL: Buffer 'VideoBuf' sumiu!" << std::endl;
       return;
     }
 
-    if (cmd.width <= 0 || cmd.height <= 0)
-    {
-      return;
-    }
+    const size_t pixelCount = static_cast<size_t>(w) * static_cast<size_t>(h);
+    std::vector<uint32_t> pixels(pixelCount, 0xFFFF00FF); // INICIA MAGENTA (ROXO)
 
-    const size_t pixelCount = static_cast<size_t>(cmd.width) * static_cast<size_t>(cmd.height);
-    const size_t bytesNeeded = pixelCount * sizeof(uint32_t);
-    std::vector<uint32_t> pixels(pixelCount, 0u);
-
+    // Tenta ler da GPU
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, bufferIt->second.ssbo);
-    const GLsizeiptr readSize = static_cast<GLsizeiptr>(std::min(bytesNeeded, bufferIt->second.byteSize));
+    const GLsizeiptr readSize = static_cast<GLsizeiptr>(std::min(pixelCount * sizeof(uint32_t), bufferIt->second.byteSize));
     glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, readSize, pixels.data());
-    // --- INÍCIO DO BLOCO DE DEBUG ---
-    if (!pixels.empty()) {
-      // 1. Imprime o valor do primeiro pixel (para saber se a GPU escreveu algo)
-      // Se imprimir 0, a GPU falhou. Se imprimir -1 ou FFFFFFFF, a GPU funcionou.
-      static int debugCounter = 0;
-      if (debugCounter++ % 60 == 0) { // Imprime 1 vez por segundo
-          std::cout << "DEBUG: Pixel[0] = " << std::hex << pixels[0] << std::dec << std::endl;
-      }
-
-      // 2. FORÇA BRUTA: Pinta a tela de Branco (Roxo) manualmente na CPU
-      // Isso prova se o problema é na janela/textura.
-      // Se a tela ficar roxa/branca, o defeito é que a GPU não estava escrevendo.
-      for (auto& p : pixels) {
-          p = 0xFF00FFFF; // Roxo Opaco (AABBGGRR)
-      }
-    }
-    // --- FIM DO BLOCO DE DEBUG ---
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-    glBindTexture(GL_TEXTURE_2D, g_presentTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, cmd.width, cmd.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    // DEBUG: Mostra o que veio da GPU (pixel do meio)
+    if (frameCount % 60 == 0) {
+      size_t mid = pixelCount / 2;
+      std::cout << "GPU DIZ: Pixel[" << mid << "] = " << std::hex << pixels[mid] << std::dec << std::endl;
+    }
 
-    int w = cmd.width;
-    int h = cmd.height;
+    // --- O ULTIMATO: SOBRESCREVER TUDO COM BRANCO ---
+    // Isso elimina a GPU da equação. Se a janela não ficar branca/roxa, o SDL2 está quebrado.
+    // Descomente a linha abaixo para testar apenas a janela (sem GPU)
+    // std::fill(pixels.begin(), pixels.end(), 0xFFFFFFFF);
+
+    // Joga na textura
+    glBindTexture(GL_TEXTURE_2D, g_presentTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
     SDL_SetWindowSize(g_window, w, h);
     glViewport(0, 0, w, h);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -983,56 +981,6 @@ void main() {
     glBindTexture(GL_TEXTURE_2D, g_presentTexture);
     glBindVertexArray(g_presentVao);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
-    std::vector<BudgetSample> budgetSnapshot;
-    {
-      std::lock_guard<std::mutex> lock(g_budgetMutex);
-      budgetSnapshot = g_budgetSamples;
-    }
-
-    if (!budgetSnapshot.empty())
-    {
-      constexpr double kFrameBudgetMs = 16.0;
-      const int overlayMargin = 12;
-      const int barHeight = 14;
-      const int barGap = 6;
-      const int maxBarWidth = 280;
-      const int barWidth = std::max(80, std::min(maxBarWidth, w - (overlayMargin * 2)));
-      const int barX = overlayMargin;
-
-      glEnable(GL_SCISSOR_TEST);
-      for (size_t i = 0; i < budgetSnapshot.size(); ++i)
-      {
-        const int yFromTop = overlayMargin + static_cast<int>(i) * (barHeight + barGap);
-        if (yFromTop + barHeight > h)
-        {
-          break;
-        }
-        const int barY = h - yFromTop - barHeight;
-
-        glScissor(barX, barY, barWidth, barHeight);
-        glClearColor(0.14f, 0.14f, 0.14f, 0.8f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        const double ratio = budgetSnapshot[i].costMs / kFrameBudgetMs;
-        const int filledWidth = std::max(0, std::min(barWidth, static_cast<int>(barWidth * std::min(ratio, 1.0))));
-        if (filledWidth > 0)
-        {
-          const bool overBudget = budgetSnapshot[i].costMs > kFrameBudgetMs;
-          glScissor(barX, barY, filledWidth, barHeight);
-          if (overBudget)
-          {
-            glClearColor(0.86f, 0.20f, 0.22f, 1.0f);
-          }
-          else
-          {
-            glClearColor(0.18f, 0.74f, 0.30f, 1.0f);
-          }
-          glClear(GL_COLOR_BUFFER_BIT);
-        }
-      }
-      glDisable(GL_SCISSOR_TEST);
-    }
 
     SDL_GL_SwapWindow(g_window);
   }
