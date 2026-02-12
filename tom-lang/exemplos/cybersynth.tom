@@ -43,8 +43,8 @@ FimDef
 
 EscopoInixMainLoop
 GpuLerInputIn32xBufferDestinoxInputBuf
-GpuDispxSintetizarAudiox2048y1z1
+GpuDispxSintetizarAudiox32y1z1
 GpuEnfileirarAudioFl32xAudioBufx@SampleCount
-GpuDispxPlasmaVideox64000y1z1
+GpuDispxPlasmaVideox1000y1z1
 GpuApresentarxVideoBufx@TelaWx@TelaH
 EscopoFimxMainLoop

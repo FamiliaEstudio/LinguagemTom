@@ -26,7 +26,7 @@ entry:
   %r6 = alloca i32
   store i32 8, i32* %r6
   %r7 = alloca i32
-  store i32 65793, i32* %r7
+  store i32 -1, i32* %r7
   %r8 = alloca [64000 x i32]
   %r9 = getelementptr inbounds [64000 x i32], [64000 x i32]* %r8, i64 0, i64 0
   ; TOM_GPU_BUFFER_CREATE name=VideoBuf type=In32 count=64000
