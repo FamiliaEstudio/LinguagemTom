@@ -29,16 +29,7 @@ FimDef
 
 DefKernelxPlasmaVideo
 GpuIdObtIn32xPixelId
-DividIn32xPixelIdy@TelaWzPixelY
-MultiIn32xPixelYy@TelaWzLinhaBase
-SubtrIn32xPixelIdyLinhaBasezPixelX
-GpuLerIn32xInputBufyZerozMouseX
-SomarIn32xPixelXyMouseXzMovX
-DividIn32xMovXy@OitozFaixaX
-DividIn32xPixelYy@OitozFaixaY
-SomarIn32xFaixaXyFaixaYzPlasma
-MultiIn32xPlasmay@CorPassozCorRGB
-GpuEscrIn32xVideoBufyPixelIdzCorRGB
+GpuEscrIn32xVideoBufyPixelIdzCorPasso
 FimDef
 
 EscopoInixMainLoop
