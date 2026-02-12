@@ -2688,7 +2688,12 @@ function emitControlFlow(line) {
       return true;
     }
 
-    terminateCurrentBlock(`br label %${currentScope.endLabel}`);
+    // SE FOR O LOOP PRINCIPAL, VOLTA PRO INÍCIO
+    if (scopeName === 'MainLoop') {
+      terminateCurrentBlock(`br label %${currentScope.startLabel}`);
+    } else {
+      terminateCurrentBlock(`br label %${currentScope.endLabel}`);
+    }
     emitLabel(currentScope.endLabel);
     if (currentScope.system) {
       const endCycleReg = nextReg();
