@@ -1,41 +1,32 @@
 DefBudgetFramexyTargetFPSy60
-DefBudgetSistemaxAudioyMaxMsy4.0
 DefBudgetSistemaxVideoyMaxMsy8.0
-DefPrioridadexAudioy10
 DefPrioridadexVideoy8
 
 DefVarInSd32xTelaWy320
 DefVarInSd32xTelaHy200
-DefVarInSd32xSampleCounty2048
-DefVarInSd32xZeroy0
-DefVarInSd32xUmy1
-DefVarInSd32xOitoy8
-DefVarInSd32xCorPassoy-1
+DefVarInSd32xZero0
 
+; Cor Branca Opaca (-1 em complemento de dois é 0xFFFFFFFF)
+DefVarInSd32xCorBrancay-1
+
+; Buffers (Tamanhos mantidos)
 GpuBufCriarIn32x64000yVideoBuf
-GpuBufCriarFl32x2048yAudioBuf
 GpuBufCriarIn32x300yInputBuf
 
-DefKernelxSintetizarAudio
-GpuIdObtIn32xSampleId
-GpuLerIn32xInputBufyUmzMouseY
-MultiFl32xSampleIdy0.1zBase
-MultiFl32xMouseYy0.01zFreqMod
-SomarFl32xBaseyFreqModzFase
-GpuMathSinFl32xFasezSinal
-MultiFl32xSinaly0.5zAmostra
-GpuEscrFl32xAudioBufySampleIdzAmostra
-FimDef
-
+; --- KERNEL DE TESTE (TELA BRANCA) ---
 DefKernelxPlasmaVideo
 GpuIdObtIn32xPixelId
-GpuEscrIn32xVideoBufyPixelIdzCorPasso
+; Escreve Branco em tudo. Se a tela acender, vencemos.
+GpuEscrIn32xVideoBufyPixelIdzCorBranca
 FimDef
 
 EscopoInixMainLoop
+; Lê input (mantido para não quebrar dependencias)
 GpuLerInputIn32xBufferDestinoxInputBuf
-GpuDispxSintetizarAudiox32y1z1
-GpuEnfileirarAudioFl32xAudioBufx@SampleCount
+
+; Disparo Seguro: 1000 grupos * 64 threads = 64.000 pixels
 GpuDispxPlasmaVideox1000y1z1
-GpuApresentarxVideoBufx@TelaWx@TelaH
+
+; Apresentar: Hardcoded 320x200 para eliminar erro de variavel
+GpuApresentarxVideoBufx320x200
 EscopoFimxMainLoop

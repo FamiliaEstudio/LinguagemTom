@@ -48,24 +48,15 @@ entry:
   ; TOM_GPU_KERNEL_END name=SintetizarAudio
   ; TOM_GPU_KERNEL_BEGIN name=PlasmaVideo
   ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=id var=PixelId
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=divid_scalar type=In32 left=PixelId right=TelaW out=PixelY
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=multi_scalar type=In32 left=PixelY right=TelaW out=LinhaBase
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=subtr_scalar type=In32 left=PixelId right=LinhaBase out=PixelX
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=load_scalar type=In32 buffer=InputBuf index=Zero out=MouseX
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=somar_scalar type=In32 left=PixelX right=MouseX out=MovX
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=divid_scalar type=In32 left=MovX right=Oito out=FaixaX
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=divid_scalar type=In32 left=PixelY right=Oito out=FaixaY
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=somar_scalar type=In32 left=FaixaX right=FaixaY out=Plasma
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=multi_scalar type=In32 left=Plasma right=CorPasso out=CorRGB
-  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=store_scalar type=In32 buffer=VideoBuf index=PixelId in=CorRGB
+  ; TOM_GPU_KERNEL_OP kernel=PlasmaVideo op=store_scalar type=In32 buffer=VideoBuf index=PixelId in=CorPasso
   ; TOM_GPU_KERNEL_END name=PlasmaVideo
   br label %escopo_MainLoop_ini_1
 escopo_MainLoop_ini_1:
   call void @TomGpu_LerInput(i32* %r13)
-  ; TOM_GPU_DISPATCH kernel=SintetizarAudio x=2048 y=1 z=1
+  ; TOM_GPU_DISPATCH kernel=SintetizarAudio x=32 y=1 z=1
   %r14 = load i32, i32* %r3
   call void @TomGpu_EnfileirarAudio(float* %r11, i32 %r14)
-  ; TOM_GPU_DISPATCH kernel=PlasmaVideo x=64000 y=1 z=1
+  ; TOM_GPU_DISPATCH kernel=PlasmaVideo x=1000 y=1 z=1
   %r15 = load i32, i32* %r1
   %r16 = load i32, i32* %r2
   call void @TomGpu_Present(i32* %r9, i32 %r15, i32 %r16)

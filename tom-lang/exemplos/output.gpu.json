@@ -1,7 +1,7 @@
 {
   "version": 1,
   "sourceFile": "cybersynth.tom",
-  "generatedAtUtc": "2026-02-12T02:19:09.769Z",
+  "generatedAtUtc": "2026-02-12T02:38:42.285Z",
   "buffers": [
     {
       "name": "VideoBuf",
@@ -27,14 +27,14 @@
   "dispatches": [
     {
       "kernelName": "SintetizarAudio",
-      "x": 2048,
+      "x": 32,
       "y": 1,
       "z": 1,
       "async": false
     },
     {
       "kernelName": "PlasmaVideo",
-      "x": 64000,
+      "x": 1000,
       "y": 1,
       "z": 1,
       "async": false
@@ -152,89 +152,18 @@
     },
     {
       "name": "PlasmaVideo",
-      "opCount": 11,
+      "opCount": 2,
       "ops": [
         {
           "kind": "id",
           "idVar": "PixelId"
         },
         {
-          "kind": "math_scalar",
-          "op": "Divid",
-          "scalarType": "In32",
-          "leftVar": "PixelId",
-          "rightVar": "TelaW",
-          "outVar": "PixelY"
-        },
-        {
-          "kind": "math_scalar",
-          "op": "Multi",
-          "scalarType": "In32",
-          "leftVar": "PixelY",
-          "rightVar": "TelaW",
-          "outVar": "LinhaBase"
-        },
-        {
-          "kind": "math_scalar",
-          "op": "Subtr",
-          "scalarType": "In32",
-          "leftVar": "PixelId",
-          "rightVar": "LinhaBase",
-          "outVar": "PixelX"
-        },
-        {
-          "kind": "load_scalar",
-          "scalarType": "In32",
-          "bufferName": "InputBuf",
-          "indexVar": "Zero",
-          "outVar": "MouseX"
-        },
-        {
-          "kind": "math_scalar",
-          "op": "Somar",
-          "scalarType": "In32",
-          "leftVar": "PixelX",
-          "rightVar": "MouseX",
-          "outVar": "MovX"
-        },
-        {
-          "kind": "math_scalar",
-          "op": "Divid",
-          "scalarType": "In32",
-          "leftVar": "MovX",
-          "rightVar": "Oito",
-          "outVar": "FaixaX"
-        },
-        {
-          "kind": "math_scalar",
-          "op": "Divid",
-          "scalarType": "In32",
-          "leftVar": "PixelY",
-          "rightVar": "Oito",
-          "outVar": "FaixaY"
-        },
-        {
-          "kind": "math_scalar",
-          "op": "Somar",
-          "scalarType": "In32",
-          "leftVar": "FaixaX",
-          "rightVar": "FaixaY",
-          "outVar": "Plasma"
-        },
-        {
-          "kind": "math_scalar",
-          "op": "Multi",
-          "scalarType": "In32",
-          "leftVar": "Plasma",
-          "rightVar": "CorPasso",
-          "outVar": "CorRGB"
-        },
-        {
           "kind": "store_scalar",
           "scalarType": "In32",
           "bufferName": "VideoBuf",
           "indexVar": "PixelId",
-          "inVar": "CorRGB"
+          "inVar": "CorPasso"
         }
       ],
       "backends": {
@@ -273,21 +202,9 @@
             {
               "name": "CorPasso",
               "glslType": "int"
-            },
-            {
-              "name": "Oito",
-              "glslType": "int"
-            },
-            {
-              "name": "TelaW",
-              "glslType": "int"
-            },
-            {
-              "name": "Zero",
-              "glslType": "uint"
             }
           ],
-          "source": "#version 460\n\nlayout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n\nlayout(std430, binding = 0) buffer TomBuf_VideoBuf { int data[]; } VideoBuf;\nlayout(std430, binding = 1) buffer TomBuf_AudioBuf { float data[]; } AudioBuf;\nlayout(std430, binding = 2) buffer TomBuf_InputBuf { int data[]; } InputBuf;\n\nlayout(push_constant) uniform TomPushConstants {\n  int CorPasso;\n  int Oito;\n  int TelaW;\n  uint Zero;\n} pc;\n\nvoid main() {\n  uint PixelId = gl_GlobalInvocationID.x;\n  int PixelY = int(PixelId) / pc.TelaW;\n  int LinhaBase = PixelY * pc.TelaW;\n  int PixelX = int(PixelId) - LinhaBase;\n  int MouseX = InputBuf.data[pc.Zero];\n  int MovX = PixelX + MouseX;\n  int FaixaX = MovX / pc.Oito;\n  int FaixaY = PixelY / pc.Oito;\n  int Plasma = FaixaX + FaixaY;\n  int CorRGB = Plasma * pc.CorPasso;\n  VideoBuf.data[PixelId] = CorRGB;\n}",
+          "source": "#version 460\n\nlayout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n\nlayout(std430, binding = 0) buffer TomBuf_VideoBuf { int data[]; } VideoBuf;\nlayout(std430, binding = 1) buffer TomBuf_AudioBuf { float data[]; } AudioBuf;\nlayout(std430, binding = 2) buffer TomBuf_InputBuf { int data[]; } InputBuf;\n\nlayout(push_constant) uniform TomPushConstants {\n  int CorPasso;\n} pc;\n\nvoid main() {\n  uint PixelId = gl_GlobalInvocationID.x;\n  VideoBuf.data[PixelId] = pc.CorPasso;\n}",
           "unsupported": []
         },
         "spirv": {
