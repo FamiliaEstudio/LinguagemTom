@@ -1,7 +1,7 @@
 {
   "version": 1,
   "sourceFile": "cybersynth.tom",
-  "generatedAtUtc": "2026-02-12T02:54:59.903Z",
+  "generatedAtUtc": "2026-02-12T02:59:58.320Z",
   "buffers": [
     {
       "name": "VideoBuf",
@@ -43,7 +43,7 @@
           "entryPoint": "main",
           "shaderStage": "compute",
           "language": "GLSL",
-          "glslVersion": 460,
+          "glslVersion": 430,
           "localSize": {
             "x": 64,
             "y": 1,
@@ -65,7 +65,7 @@
             }
           ],
           "pushConstants": [],
-          "source": "#version 460\n\nlayout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n\nlayout(std430, binding = 0) buffer TomBuf_VideoBuf { int data[]; } VideoBuf;\nlayout(std430, binding = 1) buffer TomBuf_InputBuf { int data[]; } InputBuf;\n\nlayout(push_constant) uniform TomPushConstants {\n  int _placeholder;\n} pc;\n\nvoid main() {\n  uint PixelId = gl_GlobalInvocationID.x;\n}",
+          "source": "#version 430\n\nlayout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n\nlayout(std430, binding = 0) buffer TomBuf_VideoBuf { int data[]; } VideoBuf;\nlayout(std430, binding = 1) buffer TomBuf_InputBuf { int data[]; } InputBuf;\n\nlayout(push_constant) uniform TomPushConstants {\n  int _placeholder;\n} pc;\n\nvoid main() {\n  uint PixelId = gl_GlobalInvocationID.x;\n}",
           "unsupported": []
         },
         "spirv": {

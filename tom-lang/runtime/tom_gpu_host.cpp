@@ -1110,6 +1110,7 @@ extern "C" void TomGpu_Dispatch(const char *kernel_name, int32_t x, int32_t y, i
 
 extern "C" void TomGpu_Apresentar(const char *buffer_name, int32_t width, int32_t height)
 {
+  SDL_Delay(16); // Freio de mão: Espera ~16ms (aprox. 60 FPS) para não travar o PC
   if (!g_runtimeReady.load(std::memory_order_acquire) || buffer_name == nullptr)
   {
     return;
