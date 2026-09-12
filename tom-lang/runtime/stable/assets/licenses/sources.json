@@ -1,0 +1,27 @@
+[
+  {
+    "file": "freetype-FTL.TXT",
+    "url": "https://raw.githubusercontent.com/libsdl-org/freetype/9973564cfa63763a3e4ac67c09147899539b1e07/docs/FTL.TXT",
+    "sha256": "08c135755dd589039470f1fdbb400daaabaaa50d0b366d19cebff4d22986baa1"
+  },
+  {
+    "file": "freetype-LICENSE.TXT",
+    "url": "https://raw.githubusercontent.com/libsdl-org/freetype/9973564cfa63763a3e4ac67c09147899539b1e07/LICENSE.TXT",
+    "sha256": "2e3bbb7d7c5c396368dd0853a790ec29ce5b8647163dde42a0493fb0d6556b2b"
+  },
+  {
+    "file": "harfbuzz-COPYING",
+    "url": "https://raw.githubusercontent.com/libsdl-org/harfbuzz/564bf9818a18709776856533829c0c04950773d6/COPYING",
+    "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64"
+  },
+  {
+    "file": "plutosvg-LICENSE",
+    "url": "https://raw.githubusercontent.com/libsdl-org/plutosvg/2983eb6919feea272d793bc386384e3f5b97b03c/LICENSE",
+    "sha256": "e008ab9f8b36ec517cc47be20e776e68d69f5ba75f8f774d506ae4696d0e50c4"
+  },
+  {
+    "file": "plutovg-LICENSE",
+    "url": "https://raw.githubusercontent.com/libsdl-org/plutovg/3e6f922f453da1c9e7d1d7f66cac1d9724a18b47/LICENSE",
+    "sha256": "308647f12c8111159e299a0aa50161c8b4309c59e58accd52a5f3a0c53702c05"
+  }
+]

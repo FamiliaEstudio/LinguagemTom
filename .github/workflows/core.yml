@@ -1,0 +1,80 @@
+name: Tom 0.2
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: tom-lang/.nvmrc
+      - name: LLVM 21.1.8 and desktop prerequisites
+        shell: bash
+        run: |
+          node -e 'require("./scripts/setup-native").download(require("./scripts/toolchain.json").llvmAptInstaller)'
+          sudo bash .tools/downloads/llvm-ci.sh 21
+          sudo apt-get install -y llvm-21 build-essential xvfb xauth
+          clang-21 --version | head -1 | grep -F '21.1.8'
+          opt-21 --version | grep -F '21.1.8'
+          echo 'CLANG=clang-21' >> "$GITHUB_ENV"
+          echo 'LLVM_OPT=opt-21' >> "$GITHUB_ENV"
+      - name: Pinned native dependencies and runtime libraries
+        run: node scripts/setup-native.js
+      - name: Install editor test tools from lockfile
+        run: npm ci --prefix tom-lang --ignore-scripts
+      - name: LLVM, CLI, decimal, editor and SDL regression tests
+        run: npm --prefix tom-lang test
+      - name: X11 window with targeted native input
+        run: xvfb-run -a node scripts/verify-desktop.js
+      - name: Package Linux calculator
+        run: xvfb-run -a node scripts/verify-desktop.js --package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: calculadora-linux-x64-gnu
+          path: tom-lang/exemplos/build/linux-x64-gnu/calculadora/
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install portable tools and runtime libraries
+        shell: pwsh
+        run: ./scripts/setup-windows.ps1
+      - name: Install editor test tools from lockfile
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          npm.cmd ci --prefix tom-lang --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: LLVM, CLI, decimal, editor and SDL regression tests
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          npm.cmd --prefix tom-lang test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Win32 window with targeted native input
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          node scripts/verify-desktop.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package Windows calculator
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          node scripts/verify-desktop.js --package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: calculadora-windows-x64-mingw
+          path: tom-lang/exemplos/build/windows-x64-mingw/calculadora/

@@ -1,0 +1,12 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const directory = path.resolve(__dirname, '../tom-lang');
+const manifest = require('../tom-lang/package.json');
+const output = path.join(directory, 'build', `tom-lang-${manifest.version}.vsix`);
+fs.mkdirSync(path.dirname(output), { recursive: true });
+fs.writeFileSync(path.join(directory, 'syntaxes/tom.tmGrammar.json'), JSON.stringify(require('../tom-lang/editor/grammar').createGrammar(), null, 2) + '\n');
+const result = spawnSync(process.execPath, [path.join(directory, 'node_modules/@vscode/vsce/vsce'), 'package', '--no-dependencies', '--allow-missing-repository', '--skip-license', '-o', output], { cwd: directory, stdio: 'inherit' });
+if (result.error) throw result.error;
+process.exitCode = result.status ?? 1;

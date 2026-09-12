@@ -1,89 +1,56 @@
-# TomGPU Runtime (SDL2)
+# Runtimes Tom
 
-Runtime host mínimo para executar o `output.ll` compilado da Linguagem Tom e apresentar um buffer de pixels em janela real.
+A versão 0.2 usa o [runtime estável SDL3](stable/README.md) para aplicativos 2D.
+Ele é independente do host GPU descrito abaixo.
 
-## Build do host (`tom_gpu_host.cpp`)
+# Host gráfico experimental
 
-Foi adicionado um `Makefile` para centralizar build em Linux/Windows, incluindo SDL2, OpenGL do sistema e suporte opcional a GLAD.
+Este runtime não integra o núcleo estável. O compilador atual rejeita comandos GPU
+até que seu caminho de execução esteja completo. Para programas CPU/texto, siga o
+[README principal](../../README.md); SDL não é necessário.
 
-### Linux (padrão: GLEW)
+## Limitações conhecidas
 
-```bash
+O host preserva código de pesquisa que força `VideoBuf` e resolução 320×200,
+faz chamadas OpenGL fora da thread que possui o contexto e descarrega o módulo sem
+aguardar a thread Tom. Os comandos GPU do compilador legado nem sempre emitem chamadas
+efetivas ao host. A biblioteca local `stb_image.h` é um adaptador de BMP, não oferece
+suporte a PNG/JPEG. A medição de budget mistura contadores com frequências diferentes.
+
+Essas limitações impedem tratar o host como implementação correta da linguagem.
+A consolidação 0.1 isola essa camada e não declara seus exemplos gráficos funcionais.
+
+## Dependências e build de pesquisa
+
+Linux: compilador C++17, Make, pkg-config, SDL2, GLEW, OpenGL e nlohmann/json.
+Em Debian/Ubuntu, as dependências de desenvolvimento são `build-essential pkg-config
+libsdl2-dev libglew-dev libgl-dev nlohmann-json3-dev`.
+Windows: use um ambiente MSYS2/MinGW coerente, com as versões correspondentes dessas
+bibliotecas; não misture objetos MSVC e MinGW.
+
+```sh
 cd tom-lang/runtime
 make host
+make print-config
 ```
 
-### Linux usando GLAD (em vez de GLEW)
+O loader padrão é GLEW. GLAD exige arquivos fornecidos pelo desenvolvedor:
 
-```bash
-cd tom-lang/runtime
+```sh
 make host GL_LOADER=glad GLAD_SRC=third_party/glad/src/glad.c GLAD_INCLUDE=third_party/glad/include
 ```
 
-> Ao usar `GL_LOADER=glad`, o build define `-DTOM_GPU_USE_GLAD` e compila o `glad.c` indicado em `GLAD_SRC`.
+O alvo `module` recebe explicitamente um LLVM de pesquisa, sem selecionar um
+`output.ll` obsoleto por padrão:
 
-### Windows (MinGW/clang ou g++)
-
-```bash
-cd tom-lang/runtime
-make host OS=Windows_NT SDL_LIBS="-lmingw32 -lSDL2main -lSDL2" GL_LOADER=glew
+```sh
+make module MODULE_INPUT=../experimental/artifacts/generated/exemplos/output.ll MODULE_OUT=build/legacy.so
 ```
 
-No Windows, o `Makefile` faz link com `opengl32` automaticamente (`-lopengl32`).
+No Windows use `OS=Windows_NT`, `MODULE_OUT=build/legacy.dll` e o Clang do
+mesmo ambiente MinGW. O host gera uma biblioteca de importação em `build/libtomhost.a`;
+ela é usada pelo alvo `module` no Windows.
 
-## Geração da biblioteca dinâmica carregada pelo jogo
-
-### Linux (`.so`)
-
-```bash
-cd tom-lang/runtime
-make module
-```
-
-Isso gera `tom-lang/exemplos/output.so`.
-
-### Windows (`.dll`)
-
-```bash
-cd tom-lang/runtime
-make module OS=Windows_NT
-```
-
-Isso gera `tom-lang/exemplos/output.dll`.
-
-## Pipeline completo
-
-1. Compilar `.tom` para LLVM IR:
-```bash
-node ../tomc.js ../exemplos/gpu_blit.tom
-```
-2. Transformar `output.ll` em módulo compartilhado:
-```bash
-make module
-```
-3. Executar host SDL2:
-```bash
-./tom_gpu_host ../exemplos/output.so ../exemplos/output.gpu.json
-```
-
-> `-rdynamic` é obrigatório para que o símbolo `TomGpu_Present` definido no host possa ser resolvido pelo módulo carregado via `dlopen`.
-
-
-## Base para backend GPU real (GLSL/SPIR-V)
-
-Além do `output.ll`, o compilador agora gera `output.gpu.json` quando encontra comandos `Gpu*` no `.tom`.
-
-Esse manifesto descreve:
-- buffers, uploads/downloads e dispatches;
-- lista de operações por kernel;
-- `backends.glsl_compute.source` com GLSL computável inicial;
-- bloco `backends.spirv` preparado para a próxima etapa de compilação para SPIR-V.
-
-Uso rápido:
-
-```bash
-node ../tomc.js ../exemplos/gpu_blit.tom
-cat ../exemplos/output.gpu.json
-```
-
-Esse arquivo é a ponte para um runtime futuro que fará compilação e execução real na GPU (Vulkan/OpenGL/WebGPU), sem depender do raster sequencial em CPU.
+Artefatos atuais ficam em `runtime/build/`. O caminho do módulo e do manifesto
+deve ser passado explicitamente ao host; compilar esses arquivos não comprova a
+correção do programa gráfico.

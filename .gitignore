@@ -1,0 +1,15 @@
+**/build/
+**/node_modules/
+/.tools/
+*.tmp
+*.vsix
+*.exe
+*.dll
+*.so
+*.a
+**/output.ll
+**/output.mlir
+**/output.opt.mlir
+**/output.gpu.json
+**/output.tir.json
+!tom-lang/experimental/artifacts/**

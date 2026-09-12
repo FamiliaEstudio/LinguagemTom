@@ -1,3 +1,5 @@
+> Documento de pesquisa/proposta, preservado como histórico. Não descreve o suporte do compilador 0.1. Consulte o [núcleo estável](../../README.md).
+
 # Lowering de `ParaCadaSOA` para TomIR + MLIR (Affine)
 
 ## 1) Diagnóstico do `tomc.js` atual

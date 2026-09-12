@@ -1,3 +1,5 @@
+> Documento de pesquisa/proposta, preservado como histórico. Não descreve o suporte do compilador 0.1. Consulte o [núcleo estável](README.md).
+
 # Análise Exaustiva de Latência de Hardware e Análise de Pior Caso (WCET) para Alocação de Orçamento em Tempo Real (Live Budget) em Compiladores JIT
 
 ## 1. Fundamentos da Microarquitetura e a Complexidade do Live Budget

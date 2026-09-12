@@ -1,0 +1,72 @@
+[
+  {
+    "file": "../teste.tom",
+    "status": "supported",
+    "stdin": "",
+    "stdout": "Tom: núcleo estável, 100% brasileiro.\nFim do escopo.\n",
+    "exitCode": 0
+  },
+  {
+    "file": "../teste_controle.tom",
+    "status": "supported",
+    "stdin": "",
+    "stdout": "Entrou no bloco\n",
+    "exitCode": 0
+  },
+  {
+    "file": "../rpg_vertical_slice.tom",
+    "status": "supported",
+    "stdin": "1\n",
+    "stdout": "CAVERNA SOMBRIA\n[IMG: caverna_entrada.png]\nUm cheiro de enxofre invade o ar...\nUm goblin surge das sombras!\n1) Atacar  2) Defender  3) Item  4) Fugir\n> Voce atacou o goblin!\n",
+    "exitCode": 0
+  },
+  {
+    "file": "comptime_sin_lut.tom",
+    "status": "experimental",
+    "diagnostic": "E_EXPERIMENTAL"
+  },
+  {
+    "file": "cybersynth.tom",
+    "status": "experimental",
+    "diagnostic": "E_EXPERIMENTAL"
+  },
+  {
+    "file": "fase1_heterogeneous_funcao.tom",
+    "status": "experimental",
+    "diagnostic": "E_EXPERIMENTAL"
+  },
+  {
+    "file": "gpu_blit.tom",
+    "status": "experimental",
+    "diagnostic": "E_EXPERIMENTAL"
+  },
+  {
+    "file": "paint.tom",
+    "status": "experimental",
+    "diagnostic": "E_EXPERIMENTAL"
+  },
+  {
+    "file": "sprite_test.tom",
+    "status": "experimental",
+    "diagnostic": "E_EXPERIMENTAL"
+  },
+  {
+    "file": "theremin.tom",
+    "status": "experimental",
+    "diagnostic": "E_EXPERIMENTAL"
+  },
+  {
+    "file": "../experimental/examples/teste_legacy.tom",
+    "status": "experimental",
+    "diagnostic": "E_EXPERIMENTAL"
+  },
+  {
+    "file": "calculadora.tom",
+    "status": "supported",
+    "gui": true,
+    "events": "quit\n",
+    "stdin": "",
+    "stdout": "",
+    "exitCode": 0
+  }
+]

@@ -1,3 +1,5 @@
+> Documento de pesquisa/proposta, preservado como histórico. Não descreve o suporte do compilador 0.1. Consulte o [núcleo estável](README.md).
+
 # Subsídios para criar um RPG de texto com imagens na Linguagem Tom
 
 Este guia organiza uma base prática para você prototipar um **RPG de texto com HUD/telas e imagens** usando a Linguagem Tom.

@@ -1,3 +1,5 @@
+> Documento de pesquisa/proposta, preservado como histórico. Não descreve o suporte do compilador 0.1. Consulte o [núcleo estável](../../README.md).
+
 # Computação Heterogênea no Tom: unificação CPU/GPU em `tomc.js`
 
 ## Objetivo

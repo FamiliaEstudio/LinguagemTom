@@ -1,0 +1,11 @@
+Tom 0.2 uses SDL3, SDL_ttf, libmpdec and the DejaVu Sans font.
+Their copyright notices and licenses accompany the application.
+
+This software is based in part on the work of the FreeType Team
+(https://www.freetype.org/). FreeType is used under the FreeType License (FTL).
+The SDL_ttf Windows package incorporates FreeType, HarfBuzz and SVG support;
+notices for the dependencies referenced by SDL_ttf 3.2.2 are included here.
+The Linux package also includes the distribution notices for its font libraries.
+
+The bundled license files are unchanged. sources.json records the exact upstream
+commits and SHA256 values for the SDL_ttf dependency notices.

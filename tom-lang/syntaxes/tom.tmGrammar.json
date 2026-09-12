@@ -1,71 +1,539 @@
 {
-    "scopeName": "source.tom",
-    "patterns": [
-        {
-            "comment": "1. Strings literais (l'Texto')",
-            "match": "(l')([^']*)(')",
-            "captures": {
-                "1": {
-                    "name": "keyword.operator.tom"
-                },
-                "2": {
-                    "name": "string.quoted.single.tom"
-                },
-                "3": {
-                    "name": "keyword.operator.tom"
-                }
-            }
+  "name": "Tom",
+  "scopeName": "source.tom",
+  "patterns": [
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#comments"
+    },
+    {
+      "name": "keyword.control.tom",
+      "match": "^\\s*Defer"
+    },
+    {
+      "begin": "(?:^\\s*|(?<=Defer))(DefFuncao)(x)([A-Za-z_][A-Za-z0-9_]*)(\\[)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.tom"
         },
-        {
-            "comment": "2. Comandos (Somar, GpuDisp, GpuFence...) - SEM \\b no final para aceitar colado",
-            "match": "\\b(Somarl|Somar|Subtr|Multi|Divid|GerarTxt|Aloc|Liber|ZonaDef|ZonaRst|ZonaMatar|EscopoIni|EscopoFim|DefStk|DefVar|SetVar|LerEntrada|DefTxt|SetTxt|SomarTxt|DefZn|DefKernel|FimDef|DefBudgetFrame|DefBudgetSistema|DefPrioridade|DefPrioridad|GpuBufCriar|GpuEnv|GpuIdObt|GpuLer|GpuEscr|GpuDisp|GpuDispAsync|GpuRec|GpuApresentar|GpuFence|AguardarGpu|SEProv|SEImpr)",
-            "name": "keyword.control.tom"
+        "2": {
+          "name": "punctuation.separator.tom"
         },
-        {
-            "comment": "3. Tipo + Bits (Fl64, In32). Ambos como Storage/Type (Azul/Ciano)",
-            "match": "(In|Fl|Sd|Ud)(32|64|128)",
-            "captures": {
-                "1": {
-                    "name": "storage.type.tom"
-                },
-                "2": {
-                    "name": "storage.type.tom"
-                }
-            }
+        "3": {
+          "name": "entity.name.function.tom"
         },
-        {
-            "comment": "4. Hexadecimais (0xFF...)",
-            "match": "(@|0x)([0-9A-Fa-f]+)",
-            "captures": {
-                "1": {
-                    "name": "keyword.operator.tom"
-                },
-                "2": {
-                    "name": "constant.numeric.hex.tom"
-                }
-            }
-        },
-        {
-            "comment": "5. Variável + Número (x1000). Garante separação de cores.",
-            "match": "([xyz])([0-9]+)",
-            "captures": {
-                "1": {
-                    "name": "variable.parameter.tom"
-                },
-                "2": {
-                    "name": "constant.numeric.tom"
-                }
-            }
-        },
-        {
-            "comment": "6. Variáveis soltas (x, y) que sobraram no meio.",
-            "match": "[xyz]",
-            "name": "variable.parameter.tom"
-        },
-        {
-            "comment": "7. Tipos Especiais (Vec4, Heap, etc)",
-            "match": "\\b(Vec4|Vec8|Esc|Hp|Stk|Zn|FB\\d+C|FB\\d+U|FB\\d+|I8|UT)\\b",
-            "name": "storage.type.tom"
+        "4": {
+          "name": "punctuation.section.parameters.begin.tom"
         }
-    ]
+      },
+      "end": "(\\])(y)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))?|$",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.section.parameters.end.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "support.type.tom"
+        }
+      },
+      "patterns": [
+        {
+          "match": "(Ref)?((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?:,|\\]|$))",
+          "captures": {
+            "1": {
+              "name": "storage.modifier.tom"
+            },
+            "2": {
+              "name": "support.type.tom"
+            },
+            "3": {
+              "name": "punctuation.separator.tom"
+            },
+            "4": {
+              "name": "variable.parameter.tom"
+            }
+          }
+        },
+        {
+          "name": "punctuation.separator.parameters.tom",
+          "match": ","
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(Chamar)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\[|$)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "entity.name.function.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(DefVar|SetVar)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(y)(?=@|[-0-9]|Verdadeiro|Falso)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        },
+        "4": {
+          "name": "variable.other.readwrite.tom"
+        },
+        "5": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(SetVar)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)(?=[A-Za-z_][A-Za-z0-9_]*@)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(DefTxt|SetTxt|SomarTxt)(x)([A-Za-z_][A-Za-z0-9_]*)(y)(?=l')",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "variable.other.readwrite.tom"
+        },
+        "4": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(DefStk|Somarl)(FB\\d+[CU]?)(x)([A-Za-z_][A-Za-z0-9_]*)(y)(?=l')",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        },
+        "4": {
+          "name": "variable.other.readwrite.tom"
+        },
+        "5": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(DefRecurso)(x)([A-Za-z_][A-Za-z0-9_]*)(y)(QuantidadeCaracteresTxt|TrocarCaractereTxt|CodigoCaractereTxt|DesenharRetangulo|InteiroParaTexto|JanelaApresentar|EventoConsultar|ComprimentoTxt|EventoAguardar|TextoParaDc34|Dc34ParaTexto|FonteCarregar|DesenharTexto|JanelaLimpar|RecortarTxt|JanelaCriar|EventoCriar|EventoCampo|EventoTexto|MedirTexto|LimparTxt|CopiarTxt|AnexarTxt|ApagarTxt)(?=\\[)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "variable.other.readwrite.tom"
+        },
+        "4": {
+          "name": "punctuation.separator.tom"
+        },
+        "5": {
+          "name": "support.function.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(QuantidadeCaracteresTxt|TrocarCaractereTxt|CodigoCaractereTxt|DesenharRetangulo|InteiroParaTexto|JanelaApresentar|EventoConsultar|ComprimentoTxt|EventoAguardar|TextoParaDc34|Dc34ParaTexto|FonteCarregar|DesenharTexto|JanelaLimpar|RecortarTxt|JanelaCriar|EventoCriar|EventoCampo|EventoTexto|MedirTexto|LimparTxt|CopiarTxt|AnexarTxt|ApagarTxt)(?=\\[)",
+      "captures": {
+        "1": {
+          "name": "support.function.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(GerarTxt)(x)(?=l')",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(GerarTxt)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "variable.other.readwrite.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(LerEntrada)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        },
+        "4": {
+          "name": "variable.other.readwrite.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(Capturar|ErroCodigo|ErroMensagem|ErroArquivo|ErroLinha|ErroColuna)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "variable.other.readwrite.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(EscopoIni|EscopoFim)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "entity.name.label.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(DefStructSOA)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "entity.name.type.struct.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(Prop)(In(?:32|64)|Fl(?:32|64))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        },
+        "4": {
+          "name": "variable.other.property.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(DefArraySoA)(x)([A-Za-z_][A-Za-z0-9_]*)(x)([A-Za-z_][A-Za-z0-9_]*)(x)(\\d+)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "variable.other.readwrite.tom"
+        },
+        "4": {
+          "name": "punctuation.separator.tom"
+        },
+        "5": {
+          "name": "support.type.tom"
+        },
+        "6": {
+          "name": "punctuation.separator.tom"
+        },
+        "7": {
+          "name": "constant.numeric.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(AlocSOA)(x)([A-Za-z_][A-Za-z0-9_]*)(x)([A-Za-z_][A-Za-z0-9_]*)(xy?)(\\d+)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "support.type.tom"
+        },
+        "4": {
+          "name": "punctuation.separator.tom"
+        },
+        "5": {
+          "name": "variable.other.readwrite.tom"
+        },
+        "6": {
+          "name": "punctuation.separator.tom"
+        },
+        "7": {
+          "name": "constant.numeric.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(GetVar)(x)([A-Za-z_][A-Za-z0-9_]*)(xIndex)(@[A-Za-z_][A-Za-z0-9_]*|-?\\d+)(x)([A-Za-z_][A-Za-z0-9_]*)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "variable.other.readwrite.tom"
+        },
+        "4": {
+          "name": "punctuation.separator.tom"
+        },
+        "5": {
+          "name": "variable.other.index.tom"
+        },
+        "6": {
+          "name": "punctuation.separator.tom"
+        },
+        "7": {
+          "name": "variable.other.property.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(ParaCadaSOA)(x)([A-Za-z_][A-Za-z0-9_]*)(xSomar)([A-Za-z_][A-Za-z0-9_]*)(-?\\d+)(?=\\s*(?://|$))",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "variable.other.readwrite.tom"
+        },
+        "4": {
+          "name": "keyword.control.tom"
+        },
+        "5": {
+          "name": "variable.other.property.tom"
+        },
+        "6": {
+          "name": "constant.numeric.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(Somar|Subtr|Multi|Divid)(Vec4In(?:32|64))(x)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(Somar|Subtr|Multi|Divid|SeMaior|Comparar(?:Igual|Diferente|MenorIgual|MaiorIgual|Menor|Maior)|Ou|E)(xy)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "support.type.tom"
+        },
+        "4": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(Somarl)(I8|UT|FB\\d+[CU]?)(xyx)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(Nao)(Bl)(x)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(Se|Enquanto|Retornar)(x)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "name": "keyword.control.tom",
+      "match": "(?:^\\s*|(?<=Defer))(?:Senao|FimSe|FimEnquanto|Interromper|Continuar|Tentar|FimTentar|Relancar|FimFuncao|FimDef|Retornar|GerarTxtUltimo)(?=\\s*(?://|$))"
+    },
+    {
+      "name": "invalid.deprecated.tom",
+      "match": "^\\s*(?:@\\w+|Gpu\\w*|DefKernel\\w*|Comp\\w*|Inseguro|FimInseguro|Zona\\w*|DefZn\\w*|AlocHp\\w*|LiberHp\\w*|DefBudget\\w*|DefPrioridad\\w*)"
+    },
+    {
+      "include": "#operands"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "name": "comment.line.double-slash.tom",
+      "match": "//.*$"
+    },
+    "strings": {
+      "name": "string.quoted.single.tom",
+      "begin": "l'",
+      "end": "'|$",
+      "patterns": [
+        {
+          "name": "constant.character.escape.tom",
+          "match": "\\\\[nrt'\\\\]"
+        }
+      ]
+    },
+    "operands": {
+      "patterns": [
+        {
+          "match": "([A-Za-z_][A-Za-z0-9_]*)(@)(@[A-Za-z_][A-Za-z0-9_]*|-?\\d+)(\\.)([A-Za-z_][A-Za-z0-9_]*?)(?=y(?:@|-?\\d|Verdadeiro|Falso)|\\s|,|\\]|$)",
+          "captures": {
+            "1": {
+              "name": "variable.other.readwrite.tom"
+            },
+            "2": {
+              "name": "punctuation.separator.tom"
+            },
+            "3": {
+              "name": "variable.other.index.tom"
+            },
+            "4": {
+              "name": "punctuation.accessor.tom"
+            },
+            "5": {
+              "name": "variable.other.property.tom"
+            }
+          }
+        },
+        {
+          "name": "variable.language.tom",
+          "match": "@ULTIMO(?=y(?:@|-?\\d|Verdadeiro|Falso)|[^A-Za-z0-9_]|$)"
+        },
+        {
+          "match": "(@)([A-Za-z_][A-Za-z0-9_]*?)(?=y(?:@|-?\\d|Verdadeiro|Falso)|[^A-Za-z0-9_]|$)",
+          "captures": {
+            "1": {
+              "name": "punctuation.definition.variable.tom"
+            },
+            "2": {
+              "name": "variable.other.readwrite.tom"
+            }
+          }
+        },
+        {
+          "name": "constant.language.boolean.tom",
+          "match": "(?:Verdadeiro|Falso)(?=y|[^A-Za-z0-9_]|$)"
+        },
+        {
+          "name": "constant.numeric.tom",
+          "match": "-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?"
+        },
+        {
+          "name": "punctuation.separator.tom",
+          "match": "[xy,]"
+        },
+        {
+          "name": "punctuation.section.arguments.tom",
+          "match": "[\\[\\]]"
+        }
+      ]
+    }
+  }
 }

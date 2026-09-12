@@ -1,39 +1,9 @@
-DefBudgetFramexyTargetFPSy60
-DefBudgetSistemaxParticulasyMaxMsy2.0
-DefBudgetSistemaxFisicayMaxMsy3.0
-DefPrioridadexJogadory10
-DefPrioridadexParticulasy3
-
-EscopoInixFisica
-SomarxyInSd32x1000y500
-SubtrxyInUd64x1000y2
-MultixyFl32x3.5y2.0
-DividxyFl64x22.0y7.0
-SomarVec4In32x[10,20,30,40]y[1,2,3,4]
-EscopoFimxFisica
-
-EscopoInixDegradacao
-SeMaiorxyInSd32x@TomPerf_StressLevely50
-GerarTxtxl'Fisica simplificada (stress alto)\n'
-EscopoFimxDegradacao
-
-SomarlI8xyxl'Meriadok 'yl'Aiko\n'
-DefStkFB32CxstrMsgyl'Player1 '
-SomarlFB32CxstrMsgyl'Joined\n'
-GerarTxtxstrMsg
-GerarTxtUltimo
-GerarTxtxl'Compilador Tom -> LLVM IR ativo!\n'
-
-GpuBufCriarFl32x4000000yBufPos
-GpuBufCriarFl32x4000000yBufVel
-GpuEnvFl32xRamPosxBufPos
-GpuEnvFl32xRamVelxBufVel
-DefKernelxAtualizaParticula
-GpuIdObtIn32xMeuId
-GpuLerVec4Fl32xBufPosyMeuIdzPosAtual
-GpuLerVec4Fl32xBufVelyMeuIdzVelAtual
-SomarVec4Fl32xPosAtualyVelAtualzNovaPos
-GpuEscrVec4Fl32xBufPosyMeuIdzNovaPos
-FimDef
-GpuDispxAtualizaParticulax1000000y1z1
-GpuRecFl32xBufPosyRamPos
+// Exemplo do núcleo estável; o exemplo anterior está em experimental/examples.
+DefVarInSd32xPontosy10
+SomarxyInSd32x@Pontosy20
+SetVarInSd32xPontosy@ULTIMO
+EscopoInixResultado
+DeferGerarTxtxl'Fim do escopo.\n'
+SeMaiorxyInSd32x@Pontosy29
+GerarTxtxl'Tom: núcleo estável, 100% brasileiro.\n'
+EscopoFimxResultado

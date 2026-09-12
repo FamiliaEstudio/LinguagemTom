@@ -1,44 +1,63 @@
 {
-    "name": "tom-lang",
-    "displayName": "Linguagem Tom",
-    "version": "0.0.4",
-    "engines": {
-        "vscode": "^1.70.0"
-    },
-    "categories": [
-        "Programming Languages",
-        "Snippets"
+  "name": "tom-lang",
+  "displayName": "Linguagem Tom",
+  "version": "0.2.1",
+  "engines": {
+    "vscode": "^1.70.0",
+    "node": ">=24 <25"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "tom",
+        "aliases": [
+          "Tom",
+          "tom"
+        ],
+        "extensions": [
+          ".tom"
+        ],
+        "configuration": "./language-configuration.json"
+      }
     ],
-    "contributes": {
-        "languages": [
-            {
-                "id": "tom",
-                "aliases": [
-                    "Tom",
-                    "tom"
-                ],
-                "extensions": [
-                    ".tom"
-                ],
-                "configuration": "./language-configuration.json"
-            }
-        ],
-        "grammars": [
-            {
-                "language": "tom",
-                "scopeName": "source.tom",
-                "path": "./syntaxes/tom.tmGrammar.json"
-            }
-        ],
-        "snippets": [
-            {
-                "language": "tom",
-                "path": "./snippets.json"
-            }
-        ]
-    },
-    "main": "./extension.js",
-    "activationEvents": [
-        "onLanguage:tom"
+    "grammars": [
+      {
+        "language": "tom",
+        "scopeName": "source.tom",
+        "path": "./syntaxes/tom.tmGrammar.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "tom",
+        "path": "./snippets.json"
+      }
     ]
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:tom"
+  ],
+  "description": "Tom 0.2: funções CPU, exceções, UTF-8, decimal128 e aplicativos SDL3.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:unit": "node --test tests/compiler.test.js tests/editor.test.js tests/highlighting.test.js",
+    "test:native": "node --test tests/native.test.js tests/control.test.js tests/decimal.test.js tests/ui.test.js tests/examples.test.js",
+    "check": "node tomc.js --check teste.tom",
+    "calculator": "node tomc.js --run exemplos/calculadora.tom",
+    "test:desktop": "node ../scripts/verify-desktop.js",
+    "build:grammar": "node editor/grammar.js",
+    "test:editor": "node --test tests/editor.test.js tests/highlighting.test.js",
+    "package:extension": "node ../scripts/package-extension.js"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "3.9.2",
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.3.2"
+  },
+  "publisher": "pipim-studios"
 }

@@ -1,93 +1,163 @@
 {
-    "Soma Inteiro": {
-        "prefix": "SomarIn",
-        "body": [
-            "SomarxyIn${1|Sd,Ud|}${2|32,64|}x${3:Val1}y${4:Val2}"
-        ],
-        "description": "Soma de inteiros com opções de sinal e bits."
-    },
-    "Soma Float": {
-        "prefix": "SomarFl",
-        "body": [
-            "SomarxyFl${1|32,64|}x${2:Val1}y${3:Val2}"
-        ],
-        "description": "Soma de ponto flutuante."
-    },
-    "Definir Variavel Inteira": {
-        "prefix": "DefVarIn",
-        "body": [
-            "DefVarIn${1|Sd,Ud|}${2|32,64|}x${3:nome}y${4:0}"
-        ],
-        "description": "Declara variável numérica persistente para estado de jogo."
-    },
-    "Definir Variavel Float": {
-        "prefix": "DefVarFl",
-        "body": [
-            "DefVarFl${1|32,64|}x${2:nome}y${3:0.0}"
-        ],
-        "description": "Declara variável de ponto flutuante persistente para estado de jogo."
-    },
-    "Atualizar Variavel": {
-        "prefix": "SetVar",
-        "body": [
-            "SetVarIn${1|Sd,Ud|}${2|32,64|}x${3:nome}y${4:@origem_ou_literal}"
-        ],
-        "description": "Atualiza variável já declarada."
-    },
-    "Entrada Numérica": {
-        "prefix": "LerEntrada",
-        "body": [
-            "LerEntradaIn${1|Sd,Ud|}${2|32,64|}x${3:nome}"
-        ],
-        "description": "Lê entrada numérica do jogador para uma variável."
-    },
-    "Texto Nomeado": {
-        "prefix": "DefTxt",
-        "body": [
-            "DefTxtx${1:nome}yl'${2:texto}'"
-        ],
-        "description": "Declara texto por nome para cenas e narrativa."
-    },
-    "Alocacao Heap": {
-        "prefix": "Aloc",
-        "body": [
-            "AlocHp${1|In,Fl|}${2|Sd,Ud|}${3|32,64|}x${4:ptrNome}y${5:ValorInicial}"
-        ],
-        "description": "Aloca memória na Heap."
-    },
-    "Definir Zona": {
-        "prefix": "ZonaDef",
-        "body": [
-            "ZonaDefx${1:NomeArena}y${2:4096}"
-        ],
-        "description": "Define uma nova zona de memória."
-    },
-    "GPU Dispatch": {
-        "prefix": "GpuDisp",
-        "body": [
-            "GpuDispx${1:NomeKernel}x${2:1000}y${3:1}z${4:1}"
-        ],
-        "description": "Executa um Kernel na GPU."
-    },
-    "String Stack Safe": {
-        "prefix": "StrSafe",
-        "body": [
-            "DefStkFB64Cx${1:strNome}yl'${2:Texto}'"
-        ],
-        "description": "Define string segura na stack (Fixed Buffer)."
-    },
-    "GPU Apresentar Buffer": {
-        "prefix": "GpuApresentar",
-        "body": [
-            "GpuApresentarx${1:BufTela}x${2:largura}x${3:altura}"
-        ],
-        "description": "Apresenta um buffer In32 (ARGB) em janela via runtime TomGPU."
-    },
-    "Kernel Math Escalar In32": {
-        "prefix": "KernelMathIn32",
-        "body": [
-            "${1|Somar,Subtr,Multi,Divid|}In32x${2:esquerda}y${3:direita}z${4:saida}"
-        ],
-        "description": "Operação escalar In32 para kernels TomGPU (útil para blitting/indexação)."
-    }
+  "Soma Inteiro": {
+    "prefix": "SomarIn",
+    "body": [
+      "SomarxyIn${1|Sd,Ud|}${2|32,64|}x${3:10}y${4:20}"
+    ],
+    "description": "Soma inteira com verificação de overflow."
+  },
+  "Soma Float": {
+    "prefix": "SomarFl",
+    "body": [
+      "SomarxyFl${1|32,64|}x${2:0.1}y${3:0.2}"
+    ],
+    "description": "Soma em ponto flutuante."
+  },
+  "Variável inteira": {
+    "prefix": "DefVarIn",
+    "body": [
+      "DefVarIn${1|Sd,Ud|}${2|32,64|}x${3:valor}y${4:0}"
+    ],
+    "description": "Declara variável com tipo explícito."
+  },
+  "Variável float": {
+    "prefix": "DefVarFl",
+    "body": [
+      "DefVarFl${1|32,64|}x${2:valor}y${3:0.0}"
+    ],
+    "description": "Declara variável de ponto flutuante."
+  },
+  "Atribuição": {
+    "prefix": "SetVar",
+    "body": [
+      "SetVarIn${1|Sd,Ud|}${2|32,64|}x${3:valor}y${4:0}"
+    ],
+    "description": "Atualiza uma variável já declarada com o mesmo tipo."
+  },
+  "Entrada numérica": {
+    "prefix": "LerEntrada",
+    "body": [
+      "LerEntradaIn${1|Sd,Ud|}${2|32,64|}x${3:valor}"
+    ],
+    "description": "Lê um inteiro, verificando sintaxe, sinal e faixa."
+  },
+  "Texto": {
+    "prefix": "DefTxt",
+    "body": [
+      "DefTxtx${1:mensagem}yl'${2:Olá, Tom!}'"
+    ],
+    "description": "Define texto literal UTF-8."
+  },
+  "Imprimir literal": {
+    "prefix": "GerarTxt",
+    "body": [
+      "GerarTxtxl'${1:Olá, Tom!}\\n'"
+    ],
+    "description": "Imprime conteúdo literal, incluindo sinais de porcentagem."
+  },
+  "Buffer verificado": {
+    "prefix": "StrSafe",
+    "body": [
+      "DefStkFB64Cx${1:mensagem}yl'${2:Texto}'"
+    ],
+    "description": "Buffer UTF-8 de 64 bytes incluindo NUL, mutável em execução e liberado ao sair do bloco."
+  },
+  "Escopo": {
+    "prefix": "Escopo",
+    "body": [
+      "EscopoInix${1:Bloco}",
+      "$0",
+      "EscopoFimx${1:Bloco}"
+    ],
+    "description": "Escopo léxico, sem repetição implícita."
+  },
+  "Condicional": {
+    "prefix": "SeMaior",
+    "body": [
+      "EscopoInix${1:Condicao}",
+      "SeMaiorxyInSd32x${2:10}y${3:0}",
+      "GerarTxtxl'${4:Verdadeiro}\\n'",
+      "EscopoFimx${1:Condicao}"
+    ],
+    "description": "Executa o restante do escopo se x for maior que y."
+  },
+  "Defer": {
+    "prefix": "Defer",
+    "body": [
+      "DeferGerarTxtxl'${1:Escopo encerrado.}\\n'"
+    ],
+    "description": "Dentro de um escopo, registra ação de saída em ordem inversa."
+  },
+  "Decimal": {
+    "prefix": "DefVarDc34",
+    "body": [
+      "DefVarDc34x${1:valor}y${2:0.1}"
+    ],
+    "description": "Decimal exato, com 34 dígitos significativos."
+  },
+  "Booleano": {
+    "prefix": "DefVarBl",
+    "body": [
+      "DefVarBlx${1:executar}y${2|Verdadeiro,Falso|}"
+    ],
+    "description": "Booleano."
+  },
+  "Se / Senao": {
+    "prefix": "Se",
+    "body": [
+      "Sex${1:Verdadeiro}",
+      "${2:GerarTxtxl'Sim'}",
+      "Senao",
+      "${3:GerarTxtxl'Não'}",
+      "FimSe"
+    ],
+    "description": "Condição Bl com ramos e escopos independentes."
+  },
+  "Enquanto": {
+    "prefix": "Enquanto",
+    "body": [
+      "DefVarBlx${1:executar}yVerdadeiro",
+      "Enquantox@${1:executar}",
+      "SetVarBlx${1:executar}yFalso",
+      "FimEnquanto"
+    ],
+    "description": "Laço que reinicializa declarações e limpa cada passagem."
+  },
+  "Funcao CPU": {
+    "prefix": "DefFuncao",
+    "body": [
+      "DefFuncaox${1:SomarValores}[Dc34xA,Dc34xB]yDc34",
+      "SomarxyDc34x@Ay@B",
+      "Retornarx@ULTIMO",
+      "FimFuncao",
+      "Chamarx${1:SomarValores}[0.1,0.2]"
+    ],
+    "description": "Função CPU sem recursão, com parâmetros e retorno tipados."
+  },
+  "Capturar erro": {
+    "prefix": "Tentar",
+    "body": [
+      "Tentar",
+      "${1:GerarTxtxl'Executando'}",
+      "Capturarx${2:Erro}",
+      "ErroMensagemx${2:Erro}",
+      "GerarTxtUltimo",
+      "FimTentar"
+    ],
+    "description": "Captura falhas de execução depois de executar Defer."
+  },
+  "Copiar buffer": {
+    "prefix": "CopiarTxt",
+    "body": [
+      "CopiarTxt[@${1:Destino},l'${2:Texto}']"
+    ],
+    "description": "Substituição atômica de buffer UTF-8."
+  },
+  "Janela SDL": {
+    "prefix": "JanelaCriar",
+    "body": [
+      "DefRecursox${1:Janela}yJanelaCriar[l'${2:Aplicação Tom}',480,640]"
+    ],
+    "description": "Janela SDL3 redimensionável com liberação lexical."
+  }
 }
