@@ -159,5 +159,151 @@
       "DefRecursox${1:Janela}yJanelaCriar[l'${2:Aplicação Tom}',480,640]"
     ],
     "description": "Janela SDL3 redimensionável com liberação lexical."
+  },
+  "Constante": {
+    "prefix": "DefConst",
+    "body": [
+      "DefConstInSd32x${1:VALOR}y${2:42}"
+    ],
+    "description": "Constante tipada, sem mutação."
+  },
+  "Importar biblioteca": {
+    "prefix": "Importar",
+    "body": [
+      "Importar[l'${1:tom/musica}']"
+    ],
+    "description": "Importa definições sem executar inicialização."
+  },
+  "Relogio": {
+    "prefix": "TempoAgoraNs",
+    "body": [
+      "TempoAgoraNs[]",
+      "DefVarInSd64x${1:Agora}y@ULTIMO"
+    ],
+    "description": "Captura o relógio monotônico em nanossegundos."
+  },
+  "Sorteador": {
+    "prefix": "SorteadorCriar",
+    "body": [
+      "DefRecursox${1:R}ySorteadorCriar[42,54]",
+      "SortearInteiro[@${1:R},${2:7}]"
+    ],
+    "description": "Sorteio reproduzível no intervalo [0, limite)."
+  },
+  "Audio agendado": {
+    "prefix": "AudioAgendarTom",
+    "body": [
+      "DefRecursox${1:A}yAudioCriar[]",
+      "AudioAgendarTom[@${1:A},0,440.0,0.1,500000000,0]",
+      "AudioPausar[@${1:A},Falso]"
+    ],
+    "description": "Agenda um tom; mantenha o escopo aberto durante a reprodução."
+  },
+  "SOA emprestada": {
+    "prefix": "RefSOA",
+    "body": [
+      "DefStructSOAx${1:Item}",
+      "PropBlxativo",
+      "FimDef",
+      "DefFuncaox${2:Ativar}[RefSOA<${1:Item}>xItens]yVazio",
+      "SetVarBlxItens@0.ativoyVerdadeiro",
+      "FimFuncao"
+    ],
+    "description": "Função com empréstimo mutável de uma coleção com limites verificados."
+  },
+  "Visual preparado": {
+    "prefix": "VisualTextoCriar",
+    "body": [
+      "DefRecursox${1:Visual}yVisualTextoCriar[@${2:Janela},@${3:Fonte},l'${4:Texto}']",
+      "DesenharVisual[@${2:Janela},@${1:Visual},24.0,48.0,4294967295]"
+    ],
+    "description": "Prepara o texto uma vez; X/Y indicam a origem e a linha de base."
+  },
+  "Enumeração": {
+    "prefix": "DefEnum",
+    "body": [
+      "DefEnumx${1:Fase}",
+      "ItemxPronta",
+      "ItemxPausada",
+      "FimDef",
+      "DefVarEnum<${1:Fase}>x${2:Atual}y@${1:Fase}.Pronta"
+    ],
+    "description": "Enumeração nominal; igualdade apenas entre valores do mesmo tipo."
+  },
+  "Registro": {
+    "prefix": "DefRegistro",
+    "body": [
+      "DefRegistrox${1:Sessao}",
+      "PropInSd64xorigemNs",
+      "PropBlxpausada",
+      "FimDef",
+      "DefVarRegistro<${1:Sessao}>x${2:Estado}yPadrao"
+    ],
+    "description": "Estado por valor; campos aninhados e Dc34 independentes."
+  },
+  "Registro emprestado": {
+    "prefix": "RefRegistro",
+    "body": [
+      "DefFuncaox${1:Pausar}[RefRegistro<${2:Sessao}>xEstado]yVazio",
+      "SetVarBlxEstado.pausadayVerdadeiro",
+      "FimFuncao"
+    ],
+    "description": "Mutação explícita do registro do chamador durante a chamada."
+  },
+  "Para intervalo": {
+    "prefix": "Para",
+    "body": [
+      "Parax${1:I}[${2:0},${3:10},${4:1}]",
+      "$0",
+      "FimPara"
+    ],
+    "description": "Índice InSd64 somente leitura; fim exclusivo, limites avaliados uma vez."
+  },
+  "Para índices SOA": {
+    "prefix": "ParaIndiceSOA",
+    "body": [
+      "ParaIndiceSOAx${1:I}[@${2:Itens}]",
+      "$0",
+      "FimPara"
+    ],
+    "description": "Percorre o comprimento verificado da coleção; cada passagem executa sua limpeza."
+  },
+  "Documento JSON": {
+    "prefix": "JsonCriar",
+    "body": [
+      "DefRecursox${1:Documento}yJsonCriar[1048576]",
+      "JsonDefinirInSd64[@${1:Documento},l'/versao',1]"
+    ],
+    "description": "Documento lexical com orçamento de memória explícito."
+  },
+  "Diretório do usuário": {
+    "prefix": "DadosUsuarioCriar",
+    "body": [
+      "DefRecursox${1:Dados}yDadosUsuarioCriar[l'${2:Organizacao}',l'${3:Aplicacao}']"
+    ],
+    "description": "Arquivos relativos ao diretório de preferências da aplicação."
+  },
+  "Visual transformado": {
+    "prefix": "DesenharVisualTransformado",
+    "body": [
+      "DesenharVisualTransformado[@${1:Janela},@${2:Visual},${3:100.0},${4:100.0},${5:1.0},${6:1.0},${7:0.0},${8:4294967295}]"
+    ],
+    "description": "Escala e rotação pela origem/linha de base, reutilizando a textura."
+  },
+  "Painel arredondado": {
+    "prefix": "DesenharRetanguloArredondado",
+    "body": [
+      "DesenharRetanguloArredondado[@${1:Janela},${2:40.0},${3:40.0},${4:300.0},${5:180.0},${6:16.0},${7:4294967295},${8:4294967295}]"
+    ],
+    "description": "Cantos suaves e gradiente vertical; repita a cor para preenchimento sólido."
+  },
+  "Animação por tempo": {
+    "prefix": "AnimacaoInterpolar",
+    "body": [
+      "Importar[l'tom/animacao']",
+      "ChamarxAnimacaoInterpolar[${1:0.0},${2:1.0},@${3:Inicio},${4:450000000},@${5:Agora},@AnimacaoCurva.Suave]",
+      "DefVarFl64x${6:Valor}y@ULTIMO"
+    ],
+    "description": "Curva calculada pelo horário, independente dos quadros apresentados."
   }
 }

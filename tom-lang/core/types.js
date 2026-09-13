@@ -1,14 +1,20 @@
 'use strict';
 const { fail } = require('./source');
+const { resources } = require('./resources');
 
-const TYPE_PATTERN = '(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)';
+const TYPE_PATTERN = '(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>)';
 const NUMBER_PATTERN = '-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?';
 
 function typeOf(name) {
+  const nominal = /^(Enum|Registro)<([A-Za-z_][A-Za-z0-9_]*)>$/.exec(name);
+  if (nominal) return nominal[1] === 'Enum'
+    ? { name, kind: 'enum', llvm: 'i32', bits: 32, nominal: nominal[2] }
+    : { name, kind: 'record', llvm: 'ptr', storage: `%TomRecord_${nominal[2]}`, nominal: nominal[2] };
   if (name === 'Bl') return { name, kind: 'bool', llvm: 'i1', bits: 1 };
   if (name === 'Dc34') return { name, kind: 'decimal', llvm: 'ptr' };
   if (/^FB\d+C$/.test(name)) return { name, kind: 'buffer', llvm: 'ptr', capacity: BigInt(name.slice(2, -1)) };
-  if (['Janela', 'Fonte', 'Evento', 'Txt'].includes(name)) return { name, kind: name === 'Txt' ? 'textview' : 'resource', llvm: 'ptr' };
+  if (resources[name] || name === 'Txt') return { name, kind: name === 'Txt' ? 'textview' : 'resource', llvm: 'ptr' };
+  if (/^SOA<[A-Za-z_][A-Za-z0-9_]*>$/.test(name)) return { name, kind: 'soa', struct: name.slice(4, -1), llvm: 'ptr' };
   const integer = /^In(Sd|Ud)(32|64)$/.exec(name);
   if (integer) {
     const bits = Number(integer[2]);
@@ -25,6 +31,7 @@ function typeOf(name) {
 }
 
 function literal(raw, type, location) {
+  if (['enum', 'record'].includes(type.kind)) fail('E_LITERAL', `${type.name} exige um valor do mesmo tipo.`, location);
   if (type.kind === 'bool') {
     if (!['0', '1', 'Verdadeiro', 'Falso'].includes(raw)) fail('E_LITERAL', 'Bl exige 0, 1, Verdadeiro ou Falso.', location);
     return { type, value: ['1', 'Verdadeiro'].includes(raw) ? 'true' : 'false', constant: ['1', 'Verdadeiro'].includes(raw) };

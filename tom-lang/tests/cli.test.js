@@ -70,3 +70,29 @@ test('build/run verifies, links and publishes atomically; failures preserve the 
     assert.equal(run(['--build', 'b.tom']).status, 1); assert.equal(fs.readFileSync(path.join(dir, 'build/b/user.txt'), 'utf8'), 'keep');
   } finally { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); }
 });
+
+test('CLI resolves modules, bundles checked assets and preserves packages on asset errors', () => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'tom-modules-'));
+  const run=args=>spawnSync(process.execPath,[cli,'--out-dir','build',...args],{cwd:dir,encoding:'utf8',timeout:30000});
+  try {
+    fs.writeFileSync(path.join(dir,'app.tom'),"Importar[l'./lib.tom']\nChamarxF[]\nGerarTxtxl'OK'");
+    fs.writeFileSync(path.join(dir,'lib.tom'),"Importar[l'tom/musica']\nDefFuncaoxF[]yVazio\nChamarxMusicaAltura[0,4,0]\nFimFuncao");
+    fs.mkdirSync(path.join(dir,'assets'));fs.writeFileSync(path.join(dir,'assets','custom.txt'),'UTF-8: ♯ %');
+    let result=run(['--run','--assets','assets','app.tom']);assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/OK$/);
+    const packageDir=path.join(dir,'build/app');
+    assert.equal(fs.readFileSync(path.join(packageDir,'assets/custom.txt'),'utf8'),'UTF-8: ♯ %');
+    assert.ok(fs.statSync(path.join(packageDir,'assets/tom/Bravura.otf')).size>800000);
+    assert.ok(fs.existsSync(path.join(packageDir,'assets/tom/Bravura.LICENSE')));
+    const manifest=fs.readFileSync(path.join(packageDir,'tom-build.json'),'utf8');
+    assert.ok(JSON.parse(manifest).assets.includes('tom/Bravura.otf'));
+    fs.mkdirSync(path.join(dir,'assets/tom'));fs.writeFileSync(path.join(dir,'assets/tom/Bravura.otf'),'collision');
+    result=run(['--build','--assets','assets','app.tom']);assert.equal(result.status,1);assert.match(result.stderr,/colide/);
+    assert.equal(fs.readFileSync(path.join(packageDir,'tom-build.json'),'utf8'),manifest);
+    assert.deepEqual(fs.readdirSync(path.join(dir,'build')),['app']);
+    assert.equal(run(['--assets','assets','app.tom']).status,1);
+    fs.writeFileSync(path.join(dir,'lib.tom'),'\nDefConstInSd32xCyinvalid');
+    result=run(['--check','app.tom']);assert.equal(result.status,1);assert.match(result.stderr,/lib\.tom:2:1: error E_LITERAL/);
+    fs.writeFileSync(path.join(dir,'lib.tom'),Buffer.from([255]));
+    assert.match(run(['--check','app.tom']).stderr,/E_ENCODING/);
+  } finally {fs.rmSync(dir,{recursive:true,force:true,maxRetries:10,retryDelay:100});}
+});

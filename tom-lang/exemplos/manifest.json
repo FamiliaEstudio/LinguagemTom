@@ -68,5 +68,96 @@
     "stdin": "",
     "stdout": "",
     "exitCode": 0
+  },
+  {
+    "file": "multimedia/animacao.tom",
+    "status": "supported",
+    "gui": true,
+    "events": "quit\n",
+    "assets": "assets",
+    "stdin": "",
+    "stdout": "",
+    "exitCode": 0
+  },
+  {
+    "file": "multimedia/teclado.tom",
+    "status": "supported",
+    "gui": true,
+    "events": "quit\n",
+    "assets": "assets",
+    "stdin": "",
+    "stdout": "",
+    "exitCode": 0
+  },
+  {
+    "file": "multimedia/catalogo.tom",
+    "status": "supported",
+    "gui": true,
+    "events": "quit\n",
+    "assets": "assets",
+    "stdin": "",
+    "stdout": "",
+    "exitCode": 0
+  },
+  {
+    "file": "multimedia/audio.tom",
+    "status": "supported",
+    "gui": true,
+    "events": "quit\n",
+    "assets": "assets",
+    "stdin": "",
+    "stdout": "",
+    "exitCode": 0
+  },
+  {
+    "file": "multimedia/comum.tom",
+    "status": "library"
+  },
+  {
+    "file": "estado/estado.tom",
+    "status": "supported",
+    "stdin": "",
+    "stdout": "Contador: 5\n",
+    "exitCode": 0
+  },
+  {
+    "file": "estado/entrada-dados.tom",
+    "status": "supported",
+    "events": "",
+    "stdin": "",
+    "stdout": "JSON UTF-8 e ação restaurados.\n",
+    "exitCode": 0
+  },
+  {
+    "file": "estado/interface.tom",
+    "status": "supported",
+    "gui": true,
+    "events": "quit\n",
+    "stdin": "",
+    "stdout": "",
+    "exitCode": 0
+  },
+  {
+    "file": "estado/laboratorio.tom",
+    "status": "supported",
+    "gui": true,
+    "events": "quit\n",
+    "assets": "../multimedia/assets",
+    "stdin": "",
+    "stdout": "",
+    "exitCode": 0
+  },
+  {
+    "file": "estado/laboratorio-core.tom",
+    "status": "library"
+  },
+  {
+    "file": "multimedia/visual.tom",
+    "status": "supported",
+    "gui": true,
+    "events": "quit\n",
+    "stdin": "",
+    "stdout": "",
+    "exitCode": 0
   }
 ]

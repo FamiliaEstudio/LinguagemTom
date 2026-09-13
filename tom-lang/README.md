@@ -1,18 +1,18 @@
 # Linguagem Tom — extensão para VS Code
 
-Realce de sintaxe, snippets e diagnósticos do compilador Tom 0.2. A extensão
+Realce de sintaxe, snippets e diagnósticos do compilador Tom 0.4. A extensão
 reconhece arquivos `.tom`; não exige LLVM ou SDL para colorir e validar o fonte.
 
 ## Instalar o pacote local
 
 1. Abra **Extensões** (`Ctrl+Shift+X`).
 2. No menu **…**, escolha **Instalar do VSIX… / Install from VSIX…**.
-3. Selecione `tom-lang-0.2.1.vsix`.
+3. Selecione `tom-lang-0.4.0.vsix`.
 4. Abra um arquivo `.tom`. No canto inferior direito deve aparecer **Tom**;
    se aparecer Texto sem Formatação, clique e escolha Tom. Se solicitado,
    recarregue a janela do VS Code.
 
-No repositório, o pacote fica em `tom-lang/build/tom-lang-0.2.1.vsix`.
+No repositório, o pacote fica em `tom-lang/build/tom-lang-0.4.0.vsix`.
 Em uma janela **WSL**, instale a extensão também no ambiente WSL usando esse mesmo
 menu. A instalação Windows e a instalação WSL são independentes. Caso haja um
 VSIX histórico da Tom habilitado, desabilite-o para não manter duas versões ativas.
@@ -40,7 +40,7 @@ usual é:
 |---|---|---|
 | Função declarada ou chamada | `SomarValores`, `JanelaCriar` | Amarelo |
 | Variável ou parâmetro | `Resultado`, `A`, `B` | Azul-claro |
-| Tipo | `Dc34`, `InSd32`, `FB64C` | Verde-água |
+| Tipo | `Dc34`, `InSd32`, `Registro<Sessao>`, `Enum<Fase>` | Verde-água |
 | Comando/controle | `DefFuncao`, `Retornar`, `Se`, `Tentar` | Roxo |
 | Texto literal | `l'Resultado calculado.'` | Laranja |
 | Número | `0.1`, `42` | Verde-claro |
@@ -50,6 +50,17 @@ Os separadores `x`, `y`, `xy` e `@` permanecem visíveis. Nomes de função/vari
 que contêm palavras como `Somar` ou `Fl32` são coloridos como um nome completo.
 O realce continua funcionando enquanto você digita um programa incompleto;
 erros do compilador aparecem separadamente como sublinhados e no painel Problemas.
+
+A versão 0.4 acrescenta `DefRegistro`, `DefEnum`, tipos nominais, campos aninhados,
+`Para`/`ParaIndiceSOA` e as operações de JSON, catálogos e relógio de sessão.
+Reconhece também `Importar`, `DefConst`, `SOA<Nome>`/`RefSOA<Nome>` e as
+operações de relógio, visuais e áudio. Declarações de constante têm a categoria
+`variable.other.constant`; referências `@Nome` continuam usando a categoria
+geral de variável, pois o realce TextMate não faz resolução semântica de símbolos.
+Diagnósticos resolvem bibliotecas locais e os módulos `tom/musica`, `tom/teclado`, `tom/entrada`, `tom/dados`, `tom/ui`,
+`tom/sessao` e `tom/replay`,
+considerando arquivos abertos ainda não salvos e apontando para o arquivo importado
+que contém o erro. Não é necessário compilar um executável para consultar erros.
 
 Para trocar o tema: **Preferências: Tema de Cores / Preferences: Color Theme**
 (`Ctrl+K`, depois `Ctrl+T`). A extensão usa as categorias padrão do VS Code e

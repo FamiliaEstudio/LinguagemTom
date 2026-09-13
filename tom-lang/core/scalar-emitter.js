@@ -56,7 +56,7 @@ class Emitter {
   }
 
   arrayPointer(raw, location) {
-    const match = /^([A-Za-z_][A-Za-z0-9_]*)@(@?[A-Za-z_][A-Za-z0-9_]*|-?\d+)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(raw);
+    const match = /^([A-Za-z_][A-Za-z0-9_]*)@(@?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*|-?\d+)\.([A-Za-z_][A-Za-z0-9_]*)$/.exec(raw);
     if (!match) return null;
     const array = this.lookup(match[1], location, 'array');
     const property = array.properties.get(match[3]);
@@ -65,18 +65,19 @@ class Emitter {
     if (match[2].startsWith('@')) {
       const variable = this.lookup(match[2].slice(1), location, 'numeric');
       if (variable.type.kind !== 'int') fail('E_TYPE', 'Índice SOA deve ser inteiro.', location);
-      index = this.value(`load ${variable.type.llvm}, ptr ${variable.ptr}`);
+      index = variable.constantValue ? variable.constantValue.value : this.value(`load ${variable.type.llvm}, ptr ${variable.ptr}`);
       if (variable.type.bits === 32) index = this.value(`${variable.type.signed ? 'sext' : 'zext'} i32 ${index} to i64`);
       const outside = this.value(`icmp uge i64 ${index}, ${array.count}`);
       this.guardFailure(outside, 'Índice SOA fora do limite.', location);
     } else {
       if (!/^-?\d+$/.test(match[2])) fail('E_INDEX', 'Índice SOA exige literal ou @variável.', location);
       const number = BigInt(match[2]);
-      if (number < 0n || number >= array.count) fail('E_BOUNDS', 'Índice SOA fora do limite.', location);
+      if (number < 0n || (typeof array.count === 'bigint' && number >= array.count)) fail('E_BOUNDS', 'Índice SOA fora do limite.', location);
       index = number.toString();
+      if (typeof array.count !== 'bigint') this.guardFailure(this.value(`icmp uge i64 ${index}, ${array.count}`), 'Índice SOA fora do limite.', location);
     }
-    const ptr = this.value(`getelementptr inbounds [${array.count} x ${property.type.llvm}], ptr ${property.ptr}, i64 0, i64 ${index}`);
-    return { type: property.type, ptr };
+    const ptr = this.value(`getelementptr inbounds ${property.type.llvm}, ptr ${property.ptr}, i64 ${index}`);
+    return { type: property.type, ptr, mutable: array.mutable };
   }
 
   operand(raw, type, location) {
@@ -93,6 +94,7 @@ class Emitter {
     if (raw.startsWith('@')) {
       const variable = this.lookup(raw.slice(1), location, 'numeric');
       sameType(variable.type, type, location);
+      if (variable.constantValue) return variable.constantValue;
       return { type, value: this.value(`load ${type.llvm}, ptr ${variable.ptr}`) };
     }
     return literal(raw, type, location);
@@ -174,7 +176,7 @@ class Emitter {
           this.globals.push(`${ptr} = private global [${count} x ${prop.type.llvm}] zeroinitializer`);
           properties.set(prop.name, { type: prop.type, ptr });
         }
-        this.define(node.name, { kind: 'array', count, properties }, loc);
+        this.define(node.name, { kind: 'array', struct: node.struct, count, properties, mutable: true }, loc);
         break;
       }
       case 'get': {
@@ -184,6 +186,7 @@ class Emitter {
       }
       case 'each': {
         const array = this.lookup(node.name, loc, 'array');
+        if (array.mutable === false) fail('E_BORROW', 'SOA somente leitura.', loc);
         const candidates = [...array.properties].filter(([name]) => node.operation.startsWith(name) && /^-?\d+$/.test(node.operation.slice(name.length)));
         if (!candidates.length) fail('E_PROPERTY', 'ParaCadaSOA exige uma propriedade existente seguida de incremento inteiro.', loc);
         if (candidates.length > 1) fail('E_AMBIGUOUS', 'Propriedade e incremento ambíguos em ParaCadaSOA; use nomes de propriedades sem sufixos numéricos conflitantes.', loc);
@@ -201,7 +204,7 @@ class Emitter {
         const condition = this.value(`icmp ult i64 ${i}, ${array.count}`);
         this.instruction(`br i1 ${condition}, label %${body}, label %${end}`);
         this.label(body);
-        const ptr = this.value(`getelementptr inbounds [${array.count} x ${property.type.llvm}], ptr ${property.ptr}, i64 0, i64 ${i}`);
+        const ptr = this.value(`getelementptr inbounds ${property.type.llvm}, ptr ${property.ptr}, i64 ${i}`);
         const value = this.value(`load ${property.type.llvm}, ptr ${ptr}`);
         const added = this.arithmetic('Somar', { type: property.type, value }, amount, property.type, loc);
         this.instruction(`store ${property.type.llvm} ${added.value}, ptr ${ptr}`);

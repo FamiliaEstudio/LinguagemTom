@@ -52,6 +52,9 @@ int32_t tom_text_codepoint(const char *text, uint64_t index, int32_t *out) {
   return TOM_BOUNDS;
 }
 int32_t tom_integer_format(int32_t value, TomText *out) { char text[16]; snprintf(text, sizeof(text), "%" PRId32, value); return tom_text_set(out, text); }
+int32_t tom_i64_format(int64_t value,TomText *out) { char text[32];snprintf(text,sizeof(text),"%"PRId64,value);return tom_text_set(out,text); }
+int32_t tom_u64_format(uint64_t value,TomText *out) { char text[32];snprintf(text,sizeof(text),"%"PRIu64,value);return tom_text_set(out,text); }
+int32_t tom_text_equal(const char *a,const char *b,int32_t *out) { if(!out||!tom_utf8_valid(a)||!tom_utf8_valid(b))return TOM_INVALID;*out=!strcmp(a,b);return TOM_OK; }
 
 int32_t tom_text_characters(const char *text, uint64_t *out) {
   if (!out || !tom_utf8_valid(text)) return TOM_INVALID;

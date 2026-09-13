@@ -1,0 +1,10 @@
+// Benchmark-only replacement of Desenhar. Keep formatting and observable output;
+// omit layout, font measurement and rasterization in both implementations.
+DefFuncaoxDesenhar[RefJanelaxJ,FontexGrande,FontexPequena,FontexVisor,TxtxEntrada,TxtxMensagem]yVazio
+DefStkFB128CxExibicaoyl''
+CopiarTxt[@Exibicao,@Entrada]
+TrocarCaractereTxt[@Exibicao,46,44]
+DesenharTexto[@J,@Visor,@Exibicao,36,86,4294967295]
+DesenharTexto[@J,@Pequena,@Mensagem,24,176,4292321535]
+JanelaApresentar[@J]
+FimFuncao

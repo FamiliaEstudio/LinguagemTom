@@ -28,7 +28,7 @@
           "name": "punctuation.section.parameters.begin.tom"
         }
       },
-      "end": "(\\])(y)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))?|$",
+      "end": "(\\])(y)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>)|FB\\d+[CU]?|Janela|Fonte|Evento|Sorteador|Visual|Audio|Som|DadosUsuario|Json|CatalogoVisual|CatalogoSom|SOA<[A-Za-z_][A-Za-z0-9_]*>|Txt|Vazio))?|$",
       "endCaptures": {
         "1": {
           "name": "punctuation.section.parameters.end.tom"
@@ -42,7 +42,7 @@
       },
       "patterns": [
         {
-          "match": "(Ref)?((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?:,|\\]|$))",
+          "match": "(Ref)?((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>)|FB\\d+[CU]?|Janela|Fonte|Evento|Sorteador|Visual|Audio|Som|DadosUsuario|Json|CatalogoVisual|CatalogoSom|SOA<[A-Za-z_][A-Za-z0-9_]*>|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?:,|\\]|$))",
           "captures": {
             "1": {
               "name": "storage.modifier.tom"
@@ -68,6 +68,28 @@
       ]
     },
     {
+      "match": "(?:^\\s*|(?<=Defer))(Importar|ComprimentoSOA|SOAComprimento)(?=\\[)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(ParaIndiceSOA|Para)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\[)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "variable.other.constant.tom"
+        }
+      }
+    },
+    {
       "match": "(?:^\\s*|(?<=Defer))(Chamar)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\[|$)",
       "captures": {
         "1": {
@@ -82,7 +104,27 @@
       }
     },
     {
-      "match": "(?:^\\s*|(?<=Defer))(DefVar|SetVar)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(y)(?=@|[-0-9]|Verdadeiro|Falso)",
+      "match": "(?:^\\s*|(?<=Defer))(DefConst)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>)|FB\\d+[CU]?|Janela|Fonte|Evento|Sorteador|Visual|Audio|Som|DadosUsuario|Json|CatalogoVisual|CatalogoSom|SOA<[A-Za-z_][A-Za-z0-9_]*>|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(y)(?=@|[-0-9]|Verdadeiro|Falso)",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        },
+        "4": {
+          "name": "variable.other.constant.tom"
+        },
+        "5": {
+          "name": "punctuation.separator.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(DefVar|SetVar)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>)|FB\\d+[CU]?|Janela|Fonte|Evento|Sorteador|Visual|Audio|Som|DadosUsuario|Json|CatalogoVisual|CatalogoSom|SOA<[A-Za-z_][A-Za-z0-9_]*>|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(y)(?=@|[-0-9]|Verdadeiro|Falso|Padrao)",
       "captures": {
         "1": {
           "name": "keyword.control.tom"
@@ -102,7 +144,43 @@
       }
     },
     {
-      "match": "(?:^\\s*|(?<=Defer))(SetVar)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)(?=[A-Za-z_][A-Za-z0-9_]*@)",
+      "begin": "(?:^\\s*|(?<=Defer))(SetVar)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>)|FB\\d+[CU]?|Janela|Fonte|Evento|Sorteador|Visual|Audio|Som|DadosUsuario|Json|CatalogoVisual|CatalogoSom|SOA<[A-Za-z_][A-Za-z0-9_]*>|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\.)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "support.type.tom"
+        },
+        "3": {
+          "name": "punctuation.separator.tom"
+        },
+        "4": {
+          "name": "variable.other.readwrite.tom"
+        }
+      },
+      "end": "(y)(?=@|[-0-9]|Verdadeiro|Falso|Padrao)|$",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.separator.tom"
+        }
+      },
+      "patterns": [
+        {
+          "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*?)(?=\\.|y(?:@|[-0-9]|Verdadeiro|Falso|Padrao)|$)",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.tom"
+            },
+            "2": {
+              "name": "variable.other.property.tom"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(SetVar)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>)|FB\\d+[CU]?|Janela|Fonte|Evento|Sorteador|Visual|Audio|Som|DadosUsuario|Json|CatalogoVisual|CatalogoSom|SOA<[A-Za-z_][A-Za-z0-9_]*>|Txt|Vazio))(x)(?=[A-Za-z_][A-Za-z0-9_]*@)",
       "captures": {
         "1": {
           "name": "keyword.control.tom"
@@ -153,7 +231,7 @@
       }
     },
     {
-      "match": "(?:^\\s*|(?<=Defer))(DefRecurso)(x)([A-Za-z_][A-Za-z0-9_]*)(y)(QuantidadeCaracteresTxt|TrocarCaractereTxt|CodigoCaractereTxt|DesenharRetangulo|InteiroParaTexto|JanelaApresentar|EventoConsultar|ComprimentoTxt|EventoAguardar|TextoParaDc34|Dc34ParaTexto|FonteCarregar|DesenharTexto|JanelaLimpar|RecortarTxt|JanelaCriar|EventoCriar|EventoCampo|EventoTexto|MedirTexto|LimparTxt|CopiarTxt|AnexarTxt|ApagarTxt)(?=\\[)",
+      "match": "(?:^\\s*|(?<=Defer))(DefRecurso)(x)([A-Za-z_][A-Za-z0-9_]*)(y)(DesenharCatalogoVisualTransformado|DesenharRetanguloArredondado|DesenharVisualTransformado|CatalogoVisualSubstituir|MultiplicarDividirInSd64|AudioAmostraParaTempoNs|AudioTempoNsParaAmostra|QuantidadeCaracteresTxt|DesenharCatalogoVisual|JanelaEventosCompletos|JanelaEventosPonteiro|CatalogoVisualRemover|CatalogoVisualMetrica|CatalogoSomSubstituir|JsonDefinirDocumento|FonteCarregarArquivo|CatalogoVisualCriar|CatalogoVisualTexto|CatalogoVisualGlifo|CatalogoSomCarregar|CatalogoSomRemover|CatalogoSomAgendar|AudioCompensacaoNs|TrocarCaractereTxt|CodigoCaractereTxt|DadosUsuarioCriar|JsonDefinirInSd64|JsonDefinirInUd64|JsonDefinirObjeto|EventoAguardarAte|DesenharRetangulo|CatalogoSomCriar|CatalogoSomTocar|InSd32ParaInSd64|InUd32ParaInSd64|InSd64ParaInUd32|InSd64ParaInSd32|InSd64ParaInUd64|InUd64ParaInSd64|JsonDefinirTexto|JsonDefinirArray|AudioVolumeCanal|JanelaSemRecorte|VisualTextoCriar|VisualGlifoCriar|InteiroParaTexto|JanelaApresentar|AudioRelogioLer|InSd64ParaTexto|InUd64ParaTexto|JsonComprimento|JsonObterInSd64|JsonObterInUd64|JsonDefinirFl64|JsonDefinirDc34|JsonDefinirNulo|AudioAgendarTom|AudioAgendarSom|AudioPararCanal|EventoConsultar|JsonObterTexto|SomCarregarWav|AudioVerificar|DesenharElipse|DesenharVisual|InSd32ParaFl64|InSd64ParaFl64|Fl64ParaInSd32|Fl64ParaInSd64|SorteadorCriar|SortearInteiro|ComprimentoTxt|EventoAguardar|JsonObterFl64|JsonObterDc34|JsonDefinirBl|DesenharLinha|JanelaRecorte|VisualMetrica|EventoTempoNs|TextoParaDc34|Dc34ParaTexto|FonteCarregar|DesenharTexto|TextosIguais|JsonEscrever|AudioPosicao|TempoAgoraNs|TeclaMantida|PotenciaFl64|JanelaLimpar|DadosExiste|DadosGravar|JsonExtrair|JsonObterBl|AudioPausar|AudioVolume|RecortarTxt|JanelaCriar|EventoCriar|EventoCampo|EventoTexto|JsonExiste|AudioCriar|MedirTexto|JsonCriar|LimparTxt|CopiarTxt|AnexarTxt|ApagarTxt|DadosLer|JsonTipo|AudioTom|AudioSom|JsonLer|Falhar|Exigir)(?=\\[)",
       "captures": {
         "1": {
           "name": "keyword.control.tom"
@@ -173,7 +251,7 @@
       }
     },
     {
-      "match": "(?:^\\s*|(?<=Defer))(QuantidadeCaracteresTxt|TrocarCaractereTxt|CodigoCaractereTxt|DesenharRetangulo|InteiroParaTexto|JanelaApresentar|EventoConsultar|ComprimentoTxt|EventoAguardar|TextoParaDc34|Dc34ParaTexto|FonteCarregar|DesenharTexto|JanelaLimpar|RecortarTxt|JanelaCriar|EventoCriar|EventoCampo|EventoTexto|MedirTexto|LimparTxt|CopiarTxt|AnexarTxt|ApagarTxt)(?=\\[)",
+      "match": "(?:^\\s*|(?<=Defer))(DesenharCatalogoVisualTransformado|DesenharRetanguloArredondado|DesenharVisualTransformado|CatalogoVisualSubstituir|MultiplicarDividirInSd64|AudioAmostraParaTempoNs|AudioTempoNsParaAmostra|QuantidadeCaracteresTxt|DesenharCatalogoVisual|JanelaEventosCompletos|JanelaEventosPonteiro|CatalogoVisualRemover|CatalogoVisualMetrica|CatalogoSomSubstituir|JsonDefinirDocumento|FonteCarregarArquivo|CatalogoVisualCriar|CatalogoVisualTexto|CatalogoVisualGlifo|CatalogoSomCarregar|CatalogoSomRemover|CatalogoSomAgendar|AudioCompensacaoNs|TrocarCaractereTxt|CodigoCaractereTxt|DadosUsuarioCriar|JsonDefinirInSd64|JsonDefinirInUd64|JsonDefinirObjeto|EventoAguardarAte|DesenharRetangulo|CatalogoSomCriar|CatalogoSomTocar|InSd32ParaInSd64|InUd32ParaInSd64|InSd64ParaInUd32|InSd64ParaInSd32|InSd64ParaInUd64|InUd64ParaInSd64|JsonDefinirTexto|JsonDefinirArray|AudioVolumeCanal|JanelaSemRecorte|VisualTextoCriar|VisualGlifoCriar|InteiroParaTexto|JanelaApresentar|AudioRelogioLer|InSd64ParaTexto|InUd64ParaTexto|JsonComprimento|JsonObterInSd64|JsonObterInUd64|JsonDefinirFl64|JsonDefinirDc34|JsonDefinirNulo|AudioAgendarTom|AudioAgendarSom|AudioPararCanal|EventoConsultar|JsonObterTexto|SomCarregarWav|AudioVerificar|DesenharElipse|DesenharVisual|InSd32ParaFl64|InSd64ParaFl64|Fl64ParaInSd32|Fl64ParaInSd64|SorteadorCriar|SortearInteiro|ComprimentoTxt|EventoAguardar|JsonObterFl64|JsonObterDc34|JsonDefinirBl|DesenharLinha|JanelaRecorte|VisualMetrica|EventoTempoNs|TextoParaDc34|Dc34ParaTexto|FonteCarregar|DesenharTexto|TextosIguais|JsonEscrever|AudioPosicao|TempoAgoraNs|TeclaMantida|PotenciaFl64|JanelaLimpar|DadosExiste|DadosGravar|JsonExtrair|JsonObterBl|AudioPausar|AudioVolume|RecortarTxt|JanelaCriar|EventoCriar|EventoCampo|EventoTexto|JsonExiste|AudioCriar|MedirTexto|JsonCriar|LimparTxt|CopiarTxt|AnexarTxt|ApagarTxt|DadosLer|JsonTipo|AudioTom|AudioSom|JsonLer|Falhar|Exigir)(?=\\[)",
       "captures": {
         "1": {
           "name": "support.function.tom"
@@ -206,7 +284,7 @@
       }
     },
     {
-      "match": "(?:^\\s*|(?<=Defer))(LerEntrada)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "match": "(?:^\\s*|(?<=Defer))(LerEntrada)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>)|FB\\d+[CU]?|Janela|Fonte|Evento|Sorteador|Visual|Audio|Som|DadosUsuario|Json|CatalogoVisual|CatalogoSom|SOA<[A-Za-z_][A-Za-z0-9_]*>|Txt|Vazio))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
       "captures": {
         "1": {
           "name": "keyword.control.tom"
@@ -251,7 +329,7 @@
       }
     },
     {
-      "match": "(?:^\\s*|(?<=Defer))(DefStructSOA)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "match": "(?:^\\s*|(?<=Defer))(DefStructSOA|DefRegistro|DefEnum)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
       "captures": {
         "1": {
           "name": "keyword.control.tom"
@@ -265,7 +343,21 @@
       }
     },
     {
-      "match": "(?:^\\s*|(?<=Defer))(Prop)(In(?:32|64)|Fl(?:32|64))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "match": "(?:^\\s*|(?<=Defer))(Item)(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
+      "captures": {
+        "1": {
+          "name": "keyword.control.tom"
+        },
+        "2": {
+          "name": "punctuation.separator.tom"
+        },
+        "3": {
+          "name": "constant.other.enum.tom"
+        }
+      }
+    },
+    {
+      "match": "(?:^\\s*|(?<=Defer))(Prop)(In(?:32|64)|(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>))(x)([A-Za-z_][A-Za-z0-9_]*)(?=\\s*(?://|$))",
       "captures": {
         "1": {
           "name": "keyword.control.tom"
@@ -397,7 +489,7 @@
       }
     },
     {
-      "match": "(?:^\\s*|(?<=Defer))(Somar|Subtr|Multi|Divid|SeMaior|Comparar(?:Igual|Diferente|MenorIgual|MaiorIgual|Menor|Maior)|Ou|E)(xy)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34)|FB\\d+[CU]?|Janela|Fonte|Evento|Txt|Vazio))(x)",
+      "match": "(?:^\\s*|(?<=Defer))(Somar|Subtr|Multi|Divid|SeMaior|Comparar(?:Igual|Diferente|MenorIgual|MaiorIgual|Menor|Maior)|Ou|E)(xy)((?:(?:In(?:Sd|Ud)(?:32|64)|Fl(?:32|64)|Bl|Dc34|(?:Enum|Registro)<[A-Za-z_][A-Za-z0-9_]*>)|FB\\d+[CU]?|Janela|Fonte|Evento|Sorteador|Visual|Audio|Som|DadosUsuario|Json|CatalogoVisual|CatalogoSom|SOA<[A-Za-z_][A-Za-z0-9_]*>|Txt|Vazio))(x)",
       "captures": {
         "1": {
           "name": "keyword.control.tom"
@@ -454,7 +546,7 @@
     },
     {
       "name": "keyword.control.tom",
-      "match": "(?:^\\s*|(?<=Defer))(?:Senao|FimSe|FimEnquanto|Interromper|Continuar|Tentar|FimTentar|Relancar|FimFuncao|FimDef|Retornar|GerarTxtUltimo)(?=\\s*(?://|$))"
+      "match": "(?:^\\s*|(?<=Defer))(?:Senao|FimSe|FimEnquanto|FimPara|Interromper|Continuar|Tentar|FimTentar|Relancar|FimFuncao|FimDef|Retornar|GerarTxtUltimo)(?=\\s*(?://|$))"
     },
     {
       "name": "invalid.deprecated.tom",
@@ -482,6 +574,31 @@
     },
     "operands": {
       "patterns": [
+        {
+          "begin": "(@)([A-Za-z_][A-Za-z0-9_]*)(?=\\.)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.variable.tom"
+            },
+            "2": {
+              "name": "variable.other.readwrite.tom"
+            }
+          },
+          "end": "(?=y(?:@|-?\\d|Verdadeiro|Falso)|\\s|,|\\]|$)",
+          "patterns": [
+            {
+              "match": "(\\.)([A-Za-z_][A-Za-z0-9_]*?)(?=\\.|y(?:@|-?\\d|Verdadeiro|Falso)|\\s|,|\\]|$)",
+              "captures": {
+                "1": {
+                  "name": "punctuation.accessor.tom"
+                },
+                "2": {
+                  "name": "variable.other.property.tom"
+                }
+              }
+            }
+          ]
+        },
         {
           "match": "([A-Za-z_][A-Za-z0-9_]*)(@)(@[A-Za-z_][A-Za-z0-9_]*|-?\\d+)(\\.)([A-Za-z_][A-Za-z0-9_]*?)(?=y(?:@|-?\\d|Verdadeiro|Falso)|\\s|,|\\]|$)",
           "captures": {
@@ -520,6 +637,10 @@
         {
           "name": "constant.language.boolean.tom",
           "match": "(?:Verdadeiro|Falso)(?=y|[^A-Za-z0-9_]|$)"
+        },
+        {
+          "name": "constant.language.tom",
+          "match": "Padrao(?=\\s|,|\\]|$)"
         },
         {
           "name": "constant.numeric.tom",

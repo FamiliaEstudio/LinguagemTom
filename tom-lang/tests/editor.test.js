@@ -48,3 +48,57 @@ test('0.2 snippets expand to valid programs and grammar recognizes stable functi
   assert.equal(deprecated.test('DefFuncaoxSomar[Dc34xA,Dc34xB]yDc34'), false);
   assert.equal(deprecated.test('GpuBufCriarIn32x10yA'), true);
 });
+
+test('0.3 snippets compile with the distributed library and explicit visual owners', () => {
+  const { compileResolved } = require('../core/module-loader');
+  const snippets = require('../snippets.json');
+  const expand = body => body.join('\n').replace(/\$\{\d+\|([^|]+)\|\}/g, (_, values) => values.split(',')[0]).replace(/\$\{\d+:([^{}]*)\}/g, '$1').replace(/\$\d+/g, '');
+  for (const name of ['Constante','Importar biblioteca','Relogio','Sorteador','Audio agendado','SOA emprestada','Visual preparado']) {
+    const prefix = name === 'Visual preparado' ? "DefRecursoxJanelayJanelaCriar[l'Tom',480,320]\nDefRecursoxFonteyFonteCarregar[20]\n" : '';
+    const result = compileResolved(prefix + expand(snippets[name].body));
+    assert.equal(result.success, true, name + JSON.stringify(result.diagnostics));
+  }
+});
+
+test('editor resolves unsaved dependencies and points errors to their module', () => {
+  const path = require('node:path');
+  const root = path.resolve('editor-root.tom'), dependency = path.resolve('editor-dependency.tom');
+  const doc = (fileName, source) => ({languageId:'tom', fileName, uri:fileName, getText:()=>source});
+  const main = doc(root,"Importar[l'./editor-dependency.tom']\nChamarxF[]");
+  const imported = doc(dependency,'DefFuncaoxF[]yInSd32\nRetornarx12abc\nFimFuncao');
+  const entries = new Map(), callbacks = {};
+  const vscode = {
+    Uri:{file:name=>name},
+    Range:class {constructor(line,column){this.start={line,character:column};}},
+    Diagnostic:class {constructor(range,message,severity){Object.assign(this,{range,message,severity});}},
+    DiagnosticSeverity:{Error:0},
+    languages:{createDiagnosticCollection:()=>({set:(u,d)=>entries.set(u,d),delete:u=>entries.delete(u),dispose(){}})},
+    workspace:{textDocuments:[main,imported],...Object.fromEntries(['onDidOpenTextDocument','onDidChangeTextDocument','onDidCloseTextDocument'].map(name=>[name,cb=>{callbacks[name]=cb;return {dispose(){}};}]))},
+  };
+  const original = Module._load, key = require.resolve('../extension');
+  try {
+    delete require.cache[key];
+    Module._load = function(name,...args){return name==='vscode'?vscode:original.call(this,name,...args);};
+    require('../extension').activate({subscriptions:[]});
+  } finally {Module._load=original;delete require.cache[key];}
+  assert.deepEqual(entries.get(root),[]);
+  assert.equal(entries.get(dependency).length,1);
+  assert.equal(entries.get(dependency)[0].code,'E_SYNTAX');
+  assert.equal(entries.get(dependency)[0].range.start.line,1);
+  imported.getText=()=> 'DefFuncaoxF[]yInSd32\nRetornarx42\nFimFuncao';
+  callbacks.onDidChangeTextDocument({document:imported});
+  assert.deepEqual(entries.get(root),[]);assert.deepEqual(entries.get(dependency),[]);
+});
+
+test('0.4 snippets compile with nominal types and bounded JSON', () => {
+  const { compileResolved } = require('../core/module-loader');
+  const snippets = require('../snippets.json');
+  const expand = body => body.join('\n').replace(/\$\{\d+:([^{}]*)\}/g, '$1').replace(/\$\d+/g, '');
+  for (const name of ['Enumeração','Registro','Registro emprestado','Para intervalo','Para índices SOA','Documento JSON','Diretório do usuário']) {
+    let prefix = '';
+    if (name === 'Registro emprestado') prefix = 'DefRegistroxSessao\nPropBlxpausada\nFimDef\n';
+    if (name === 'Para índices SOA') prefix = 'DefStructSOAxItem\nPropBlxativo\nFimDef\nDefArraySoAxItensxItemx3\n';
+    const r=compileResolved(prefix+expand(snippets[name].body));
+    assert.equal(r.success,true,name+JSON.stringify(r.diagnostics));
+  }
+});

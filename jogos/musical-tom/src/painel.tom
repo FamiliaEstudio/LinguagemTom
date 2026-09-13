@@ -1,0 +1,302 @@
+Importar[l'./audio.tom']
+DefFuncaoxJogoResumo[Registro<JogoConfiguracao>xConfig,RefFB512CxTexto]yVazio
+LimparTxt[@Texto]
+CompararIgualxyInSd32x@Config.modoy0
+Sex@ULTIMO
+AnexarTxt[@Texto,l'APRENDER']
+FimSe
+CompararIgualxyInSd32x@Config.modoy1
+Sex@ULTIMO
+AnexarTxt[@Texto,l'MOVIMENTO']
+FimSe
+CompararIgualxyInSd32x@Config.modoy2
+Sex@ULTIMO
+AnexarTxt[@Texto,l'RITMO']
+FimSe
+CompararIgualxyInSd32x@Config.clavey0
+Sex@ULTIMO
+AnexarTxt[@Texto,l' · clave de SOL']
+Senao
+AnexarTxt[@Texto,l' · clave de FÁ']
+FimSe
+AnexarTxt[@Texto,l' · ']
+ChamarxJogoNumero[@Texto,@Config.bpm]
+AnexarTxt[@Texto,l' BPM · ']
+Sex@Config.acidentes
+AnexarTxt[@Texto,l'naturais, # e bemóis']
+Senao
+AnexarTxt[@Texto,l'notas naturais']
+FimSe
+FimFuncao
+
+DefFuncaoxJogoProximo[Registro<JogoPerfil>xPerfil,SOA<JogoDominio>xDominios,RefFB512CxTexto]yVazio
+CopiarTxt[@Texto,l'Próximo: ']
+ChamarxJogoDominada[@Dominios,0,0,60]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l'Movimento · 300 pontos + duas rodadas Aprender/Sol com 18 acertos.']
+Retornar
+FimSe
+ChamarxJogoDominada[@Dominios,1,0,60]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l'Clave de fá · 600 pontos + duas rodadas Movimento/Sol com 18 acertos.']
+Retornar
+FimSe
+ChamarxJogoDominada[@Dominios,0,1,60]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l'Acidentes · 1.000 pontos + duas rodadas Aprender/Fá com 18 acertos.']
+Retornar
+FimSe
+ChamarxJogoDominada[@Dominios,1,1,60]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l'Ritmo em fá · 1.400 pontos + domínio de Movimento/Fá.']
+Retornar
+FimSe
+ChamarxJogoDominada[@Dominios,2,0,60]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l'90 BPM em sol · 1.800 pontos + domínio de Ritmo/Sol a 60 BPM.']
+Retornar
+FimSe
+ChamarxJogoDominada[@Dominios,2,0,90]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l'120 BPM em sol · 2.600 pontos + domínio de Ritmo/Sol a 90 BPM.']
+Retornar
+FimSe
+ChamarxJogoDominada[@Dominios,2,1,60]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l'90 BPM em fá · 1.800 pontos + domínio de Ritmo/Fá a 60 BPM.']
+Retornar
+FimSe
+ChamarxJogoDominada[@Dominios,2,1,90]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l'120 BPM em fá · 2.600 pontos + domínio de Ritmo/Fá a 90 BPM.']
+Retornar
+FimSe
+CopiarTxt[@Texto,l'Todos os domínios básicos conquistados! Continue aperfeiçoando a leitura.']
+FimFuncao
+
+DefFuncaoxJogoPainel[RefCatalogoVisualxCatalogo,FontexFonte,SOA<JogoLinhaVisual>xLinhas,Registro<JogoPerfil>xPerfil,SOA<JogoDominio>xDominios,SOA<JogoEstatistica>xEstatisticas,SOA<JogoResultado>xResultados,SOA<EntradaVinculo>xVinculos,Registro<JogoConfiguracao>xEscolha,Registro<JogoEstado>xEstado,InSd32xPagina,InSd64xPaginaDados,BlxVerNotas,InSd64xTecla,BlxRemapeando]yVazio
+DefStkFB512CxTextoyl''
+CompararIgualxyInSd32x@Paginay0
+Sex@ULTIMO
+CopiarTxt[@Texto,l'Leia uma nota. Descubra um som. Conquiste um novo desafio.']
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,0,@Texto]
+CopiarTxt[@Texto,l'Seu progresso: ']
+ChamarxJogoNumero[@Texto,@Perfil.pontos]
+AnexarTxt[@Texto,l' pontos · ']
+ChamarxJogoNumero[@Texto,@Perfil.ultima]
+AnexarTxt[@Texto,l' rodadas concluídas']
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,1,@Texto]
+ChamarxJogoProximo[@Perfil,@Dominios,@Texto]
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,2,@Texto]
+ChamarxJogoResumo[@Escolha,@Texto]
+ChamarxJogoLiberado[@Perfil,@Dominios,@Escolha]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l' · BLOQUEADO']
+FimSe
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,3,@Texto]
+CopiarTxt[@Texto,l'Fundo: Brilha, Brilha, Estrelinha']
+CompararIgualxyInSd32x@Escolha.musicay1
+Sex@ULTIMO
+CopiarTxt[@Texto,l'Fundo: Frère Jacques · 500 pontos + Aprender/Sol']
+FimSe
+CompararIgualxyInSd32x@Escolha.musicay2
+Sex@ULTIMO
+CopiarTxt[@Texto,l'Fundo: Ode à Alegria · 1.200 pontos + Aprender/Fá']
+FimSe
+ChamarxJogoMusicaLiberada[@Perfil,@Dominios,@Escolha.musica]
+NaoBlx@ULTIMO
+Sex@ULTIMO
+AnexarTxt[@Texto,l' · BLOQUEADO']
+FimSe
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,4,@Texto]
+ChamarxJogoCombinacao[@Escolha.modo,@Escolha.clave,@Escolha.bpm,@Escolha.acidentes]
+DefVarInSd64xIy@ULTIMO
+CopiarTxt[@Texto,l'Domínio nesta seleção: ']
+ChamarxJogoNumero[@Texto,Dominios@@I.qualificadas]
+AnexarTxt[@Texto,l'/2 rodadas com 18 acertos sem ajuda. Tab navega; Enter confirma.']
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,5,@Texto]
+FimSe
+CompararIgualxyInSd32x@Paginay2
+Sex@ULTIMO
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,0,l'Rodada concluída! Cada nota é mais um passo na leitura.']
+CopiarTxt[@Texto,l'Pontos nesta rodada: ']
+ChamarxJogoNumero[@Texto,@Estado.pontos]
+AnexarTxt[@Texto,l' · total acumulado: ']
+ChamarxJogoNumero[@Texto,@Perfil.pontos]
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,1,@Texto]
+CopiarTxt[@Texto,l'Acertos pontuáveis: ']
+ChamarxJogoNumero[@Texto,@Estado.acertos]
+AnexarTxt[@Texto,l'/20 · notas com erro: ']
+ChamarxJogoNumero[@Texto,@Estado.erros]
+AnexarTxt[@Texto,l' · ajudas: ']
+ChamarxJogoNumero[@Texto,@Estado.ajudas]
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,2,@Texto]
+CopiarTxt[@Texto,l'Respostas precisas no Ritmo: ']
+ChamarxJogoNumero[@Texto,@Estado.precisos]
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,3,@Texto]
+ChamarxJogoProximo[@Perfil,@Dominios,@Texto]
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,4,@Texto]
+CompararMaiorIgualxyInSd64x@Estado.acertosy18
+Sex@ULTIMO
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,5,l'✓ Esta rodada conta para o domínio da seleção!']
+Senao
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,5,l'Continue praticando: 18 acertos pontuáveis fazem a rodada contar para domínio.']
+FimSe
+FimSe
+CompararIgualxyInSd32x@Paginay3
+Sex@ULTIMO
+DefArraySoAxNomeNotaxJogoNotax1
+ChamarxJogoResumo[@Escolha,@Texto]
+Sex@VerNotas
+AnexarTxt[@Texto,l' · desempenho por escrita (todas as velocidades)']
+Senao
+CopiarTxt[@Texto,l'Últimas 50 rodadas · da mais recente para a mais antiga']
+FimSe
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,0,@Texto]
+ParaxLinha[1,8,1]
+SubtrxyInSd64x@Linhay1
+DefVarInSd64xDeslocamentoy@ULTIMO
+MultixyInSd64x@PaginaDadosy7
+SomarxyInSd64x@ULTIMOy@Deslocamento
+DefVarInSd64xIy@ULTIMO
+LimparTxt[@Texto]
+Sex@VerNotas
+CompararMenorxyInSd64x@Iy18
+Sex@ULTIMO
+InSd64ParaInSd32[@I]
+ChamarxJogoEscreverNota[@NomeNota,0,@ULTIMO,@Escolha.clave]
+ChamarxJogoNomeNota[@NomeNota,0,@Vinculos,@Texto]
+InSd32ParaInSd64[@Escolha.clave]
+MultixyInSd64x@ULTIMOy3
+DefVarInSd64xBasey@ULTIMO
+InSd32ParaInSd64[@Escolha.modo]
+SomarxyInSd64x@Basey@ULTIMO
+MultixyInSd64x@ULTIMOy18
+SomarxyInSd64x@ULTIMOy@I
+DefVarInSd64xJy@ULTIMO
+AnexarTxt[@Texto,l' · acertos ']
+ChamarxJogoNumero[@Texto,Estatisticas@@J.acertos]
+AnexarTxt[@Texto,l'/']
+ChamarxJogoNumero[@Texto,Estatisticas@@J.vistas]
+AnexarTxt[@Texto,l' · erros ']
+ChamarxJogoNumero[@Texto,Estatisticas@@J.erros]
+AnexarTxt[@Texto,l' · ajudas ']
+ChamarxJogoNumero[@Texto,Estatisticas@@J.ajudas]
+CompararMaiorxyInSd64xEstatisticas@@J.respostasy0
+Sex@ULTIMO
+MultixyInSd64xEstatisticas@@J.respostasy48
+DefVarInSd64xDivisory@ULTIMO
+DividxyInSd64xEstatisticas@@J.reacaoy@Divisor
+DefVarInSd64xMediay@ULTIMO
+AnexarTxt[@Texto,l' · média ']
+ChamarxJogoNumero[@Texto,@Media]
+AnexarTxt[@Texto,l' ms']
+CompararIgualxyInSd32x@Escolha.modoy2
+Sex@ULTIMO
+DividxyInSd64xEstatisticas@@J.desvioy@Divisor
+SetVarInSd64xMediay@ULTIMO
+AnexarTxt[@Texto,l' · desvio ']
+ChamarxJogoNumero[@Texto,@Media]
+AnexarTxt[@Texto,l' ms']
+FimSe
+FimSe
+FimSe
+Senao
+CompararMenorxyInSd64x@Iy@Perfil.quantidade
+Sex@ULTIMO
+AnexarTxt[@Texto,l'Rodada ']
+ChamarxJogoNumero[@Texto,Resultados@@I.id]
+AnexarTxt[@Texto,l' · ']
+ChamarxJogoNumero[@Texto,Resultados@@I.pontos]
+AnexarTxt[@Texto,l' pontos · ']
+ChamarxJogoNumero[@Texto,Resultados@@I.acertos]
+AnexarTxt[@Texto,l'/20 acertos · erros ']
+ChamarxJogoNumero[@Texto,Resultados@@I.erros]
+AnexarTxt[@Texto,l' · ajudas ']
+ChamarxJogoNumero[@Texto,Resultados@@I.ajudas]
+AnexarTxt[@Texto,l' · ']
+ChamarxJogoNomeSelecao[Resultados@@I.combinacao,@Texto]
+FimSe
+FimSe
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,@Linha,@Texto]
+FimPara
+FimSe
+CompararIgualxyInSd32x@Paginay4
+Sex@ULTIMO
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,0,l'Volumes independentes: arraste ou use Tab e setas. Zero deixa o canal em silêncio.']
+CopiarTxt[@Texto,l'Compensações em ms · entrada: ']
+DividxyInSd64x@Perfil.config.calibracao.entradaNsy1000000
+ChamarxJogoNumero[@Texto,@ULTIMO]
+AnexarTxt[@Texto,l' · áudio: ']
+DividxyInSd64x@Perfil.config.calibracao.audioNsy1000000
+ChamarxJogoNumero[@Texto,@ULTIMO]
+AnexarTxt[@Texto,l' · apresentação: ']
+DividxyInSd64x@Perfil.config.calibracao.videoNsy1000000
+ChamarxJogoNumero[@Texto,@ULTIMO]
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,1,@Texto]
+CopiarTxt[@Texto,l'Associação ']
+ChamarxJogoNumero[@Texto,@Tecla]
+AnexarTxt[@Texto,l' (0–6: C D E F G A B; 7: #; 8: bemol) · tecla atual: ']
+DefStkFB16CxNomeTeclayl''
+ChamarxJogoNomeTecla[Vinculos@@Tecla.codigo,@NomeTecla]
+AnexarTxt[@Texto,@NomeTecla]
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,2,@Texto]
+Sex@Remapeando
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,3,l'Pressione uma letra ou número disponível. Escape cancela; F1 permanece ajuda.']
+Senao
+ChamarxJogoLinha[@Catalogo,@Fonte,@Linhas,3,l'As alterações são salvas automaticamente. As compensações aceitam de -500 a +500 ms.']
+FimSe
+FimSe
+FimFuncao
+
+DefFuncaoxJogoNomeSelecao[InSd64xCodigo,RefFB512CxTexto]yVazio
+DividxyInSd64x@Codigoy12
+DefVarInSd64xModoy@ULTIMO
+MultixyInSd64x@Modoy12
+SubtrxyInSd64x@Codigoy@ULTIMO
+DefVarInSd64xRestoy@ULTIMO
+DividxyInSd64x@Restoy6
+DefVarInSd64xClavey@ULTIMO
+CompararIgualxyInSd64x@Clavey0
+Sex@ULTIMO
+AnexarTxt[@Texto,l'Sol / ']
+Senao
+AnexarTxt[@Texto,l'Fá / ']
+FimSe
+CompararIgualxyInSd64x@Modoy0
+Sex@ULTIMO
+AnexarTxt[@Texto,l'Aprender']
+FimSe
+CompararIgualxyInSd64x@Modoy1
+Sex@ULTIMO
+AnexarTxt[@Texto,l'Movimento']
+FimSe
+CompararIgualxyInSd64x@Modoy2
+Sex@ULTIMO
+AnexarTxt[@Texto,l'Ritmo']
+FimSe
+MultixyInSd64x@Clavey6
+SubtrxyInSd64x@Restoy@ULTIMO
+DividxyInSd64x@ULTIMOy2
+MultixyInSd64x@ULTIMOy30
+SomarxyInSd64x@ULTIMOy60
+DefVarInSd64xBpmy@ULTIMO
+AnexarTxt[@Texto,l' / ']
+ChamarxJogoNumero[@Texto,@Bpm]
+AnexarTxt[@Texto,l' BPM']
+DividxyInSd64x@Codigoy2
+MultixyInSd64x@ULTIMOy2
+CompararDiferentexyInSd64x@ULTIMOy@Codigo
+Sex@ULTIMO
+AnexarTxt[@Texto,l' #/b']
+FimSe
+FimFuncao

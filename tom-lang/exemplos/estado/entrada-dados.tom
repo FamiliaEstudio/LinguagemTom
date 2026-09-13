@@ -1,0 +1,28 @@
+// A mesma associação é salva em JSON, lida e exercitada com um evento Tom.
+Importar[l'tom/entrada']
+Importar[l'tom/dados']
+DefRecursoxDadosyDadosUsuarioCriar[l'Tom',l'Entrada04']
+DefRecursoxDocumentoyJsonCriar[262144]
+JsonDefinirInSd64[@Documento,l'/versao',1]
+JsonDefinirTexto[@Documento,l'/descricao',l'Primeira ação ♫']
+JsonDefinirInSd64[@Documento,l'/tecla',97]
+DefStkFB1024CxTextoyl''
+JsonEscrever[@Documento,@Texto]
+DadosGravar[@Dados,l'entrada.json',@Texto]
+LimparTxt[@Texto]
+DadosLer[@Dados,l'entrada.json',1023,@Texto]
+DefRecursoxLidoyJsonLer[@Texto,262144]
+DefArraySoAxVinculosxEntradaVinculox1
+DefArraySoAxAcoesxEntradaAcaox1
+SetVarBlxVinculos@0.habilitadoyVerdadeiro
+JsonObterInSd64[@Lido,l'/tecla']
+InSd64ParaInSd32[@ULTIMO]
+SetVarInSd32xVinculos@0.codigoy@ULTIMO
+ChamarxEntradaRemapear[@Vinculos,@Acoes,0]
+DefVarRegistro<EntradaEvento>xEventoyPadrao
+SetVarInSd32xEvento.tipoy@EVENTO_PRESSIONAR
+SetVarInSd32xEvento.teclay97
+SetVarInSd64xEvento.tempoNsy9007199254740993
+ChamarxEntradaAtualizar[@Vinculos,@Acoes,@Evento]
+Exigir[Acoes@0.pressionada]
+GerarTxtxl'JSON UTF-8 e ação restaurados.\n'

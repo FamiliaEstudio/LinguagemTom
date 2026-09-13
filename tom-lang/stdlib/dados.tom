@@ -1,0 +1,36 @@
+// JSON Pointer usa /campo/0; ~0 representa ~ e ~1 representa /.
+// Os formatos Tom gravam horários/sementes como strings decimais exatas.
+DefConstInSd32xJSON_NULOy0
+DefConstInSd32xJSON_BOOLEANOy1
+DefConstInSd32xJSON_NUMEROy2
+DefConstInSd32xJSON_TEXTOy3
+DefConstInSd32xJSON_ARRAYy4
+DefConstInSd32xJSON_OBJETOy5
+DefConstInSd64xDADOS_VERSAOy1
+
+DefFuncaoxDadosIndice[TxtxPrefixo,InSd64xIndice,RefFB256CxDestino]yVazio
+CompararMaiorIgualxyInSd64x@Indicey0
+Exigir[@ULTIMO]
+DefStkFB32CxNumeroyl''
+InSd64ParaTexto[@Indice,@Numero]
+CopiarTxt[@Destino,@Prefixo]
+AnexarTxt[@Destino,l'/']
+AnexarTxt[@Destino,@Numero]
+FimFuncao
+
+DefFuncaoxDadosSalvarJson[RefDadosUsuarioxDados,TxtxNome,JsonxDocumento,RefFB65536CxTexto]yVazio
+JsonEscrever[@Documento,@Texto]
+DadosGravar[@Dados,@Nome,@Texto]
+FimFuncao
+
+DefFuncaoxDadosDefinirHorario[RefJsonxDocumento,TxtxCaminho,InSd64xValor]yVazio
+DefStkFB32CxTextoyl''
+InSd64ParaTexto[@Valor,@Texto]
+JsonDefinirTexto[@Documento,@Caminho,@Texto]
+FimFuncao
+
+DefFuncaoxDadosDefinirSemente[RefJsonxDocumento,TxtxCaminho,InUd64xValor]yVazio
+DefStkFB32CxTextoyl''
+InUd64ParaTexto[@Valor,@Texto]
+JsonDefinirTexto[@Documento,@Caminho,@Texto]
+FimFuncao

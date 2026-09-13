@@ -1,8 +1,11 @@
-# Contrato do núcleo Tom 0.2
+# Contrato do núcleo Tom 0.4
 
 Este documento descreve somente o compilador estável. Exemplos executáveis e seus
 resultados estão em `../exemplos/manifest.json`. Recursos não descritos aqui são
 rejeitados. Não há compatibilidade de comportamento com erros do compilador antigo.
+
+Os [acréscimos 0.4](state-0.4.md) definem registros, enumerações, `Para`, ações,
+JSON, catálogos, sessões e replay. Esse contrato complementa os comandos abaixo.
 
 ## Fonte, tipos e números
 
@@ -52,7 +55,7 @@ Declarações exigem valor inicial. Nomes visíveis não podem ser redeclarados,
 com tipo diferente. Variáveis pertencem ao escopo que as declarou e deixam de ser
 visíveis no seu fim. Atribuições a variáveis externas permanecem após o escopo.
 
-`@ULTIMO` é o último resultado escalar de aritmética, atribuição ou `GetVar` no bloco
+`@ULTIMO` é o último resultado tipado (inclusive registros) de aritmética, atribuição ou `GetVar` no bloco
 atual. É invalidado ao entrar/sair de um escopo, depois de `SeMaior` e depois de
 `ParaCadaSOA`. Use variável explícita para transportar resultados entre blocos.
 
@@ -126,7 +129,7 @@ GetVarxgrupoxIndex0xhp
 DefVarInSd32xResultadoy@ULTIMO
 ```
 
-Propriedades aceitam `In32`, `In64`, `Fl32` e `Fl64`; inteiros SOA são signed.
+Propriedades aceitam `In32`, `In64`, `Fl32`, `Fl64` e `Bl`; inteiros SOA são signed.
 `AlocSOAxPessoaxgrupox5` e a variante `xy5` são aliases de alocação. A quantidade é
 literal positiva, limitada a 2147483647 elementos; a memória necessária continua
 sujeita aos limites da plataforma. Dados são reinicializados com zero toda vez que a declaração é executada e ficam em
@@ -146,12 +149,14 @@ se `hp` e `hp2` tornarem `Somarhp22` ambíguo, a compilação falha com `E_AMBIG
 ```js
 const { compile } = require('./core/compiler');
 const result = compile('SomarxyInSd32x10y20', { file: 'exemplo.tom' });
-// Sucesso: { success: true, diagnostics: [], artifacts: { llvm: '...', runtimeRequirements: [] } }
+// Sucesso: { success: true, diagnostics: [], artifacts:
+//   { llvm: '...', runtimeRequirements: [], assetRequirements: [] } }
 // Falha: { success: false, diagnostics: [{ code, severity, message,
 //          file, line, column }], artifacts: {} }
 ```
 
-Linha e coluna começam em 1 e são preservadas desde o fonte. `runtimeRequirements` lista `text`, `decimal` e/ou `ui` conforme as operações usadas.
+Linha e coluna começam em 1 e são preservadas desde o fonte. `runtimeRequirements` lista `text`, `decimal`, `ui`, `time`, `math` e/ou `audio` conforme as operações usadas.
+`assetRequirements` lista os assets padronizados necessários (por exemplo Bravura).
 `core/native-build.js` consome esses metadados; a geração LLVM permanece separada
 do link e de qualquer operação de arquivos. A API é síncrona,
 determinística, sem leitura/gravação de arquivos nem execução de JavaScript do
@@ -264,10 +269,11 @@ captura propaga o mesmo erro. O objeto de erro pertence somente à captura.
 | 2 | Divisão inválida/por zero, incluindo mínimo signed dividido por −1 |
 | 3 | Subfluxo decimal inexato |
 | 4 | Entrada inválida ou conversão com perda de precisão |
-| 5 | Capacidade de buffer excedida |
+| 5 | Capacidade de buffer, fila ou carregamento excedida |
 | 6 | Índice fora do limite |
 | 7 | Memória insuficiente |
-| 8 | Falha ao criar ou utilizar recurso gráfico |
+| 8 | Falha de recurso: janela, áudio ou arquivo |
+| 9 | Áudio agendado para posição já processada |
 
 Somente falhas em execução são capturáveis. Literais inválidos e operações
 constantes inválidas continuam sendo erros de compilação. Não há exceções C++
@@ -344,3 +350,95 @@ Veja a [ABI e o guia gráfico](../runtime/stable/README.md) e o
 `DefRecursoxNomeyConstrutor[...]` e pertencem ao bloco em que foram declarados.
 SDL e SDL_ttf permanecem na thread principal. Não há ponteiros ou liberação manual
 expostos na sintaxe Tom; a saída lexical libera automaticamente cada recurso.
+
+## Módulos e constantes (0.3)
+
+```tom
+Importar[l'tom/musica']
+Importar[l'./minha-biblioteca.tom']
+DefConstInSd32xVELOCIDADEy144
+DefConstFl64xGANHOy0.1
+DefConstBlxATIVOyVerdadeiro
+```
+
+Importações ficam no nível superior. Caminhos começam por `./` ou `../` e são
+relativos ao arquivo que importa; `tom/nome` identifica um módulo da distribuição.
+O identificador normalizado é sensível a maiúsculas; mantenha a mesma grafia nas
+duas plataformas. Importações repetidas são deduplicadas. Ciclos, fontes ausentes,
+UTF-8 inválido e definições duplicadas produzem diagnóstico com a localização de
+origem. Módulos importados só podem conter importações, funções, constantes e
+estruturas. Não abrem recursos nem executam inicialização implicitamente.
+
+Definições importadas compartilham os espaços de nomes existentes; use prefixos
+para nomes públicos. Não há aliases nem declaração de exportação nesta versão.
+Constantes aceitam inteiros, floats e `Bl`, com literal ou referência a outra
+constante já definida. Não aceitam `Dc34`, chamadas nem valores de variáveis.
+Constantes superiores ficam disponíveis às funções como valores imutáveis,
+sem criar armazenamento global mutável. Constantes locais respeitam o escopo.
+
+`compile()` continua pura e recebe todos os fontes explicitamente:
+
+```js
+compile("Importar[l'./limites.tom']\nDefVarInSd32xNy@LIMITE", {
+  file: 'app/main.tom',
+  modules: { 'app/limites.tom': 'DefConstInSd32xLIMITEy32' }
+});
+```
+
+As chaves de `modules` são caminhos normalizados com `/`, ou `tom/musica` e
+`tom/teclado`. A API pura não resolve esses módulos sozinha. A CLI e a extensão
+usam `core/module-loader.js` para ler arquivos antes de chamar o compilador;
+o editor considera fontes ainda não salvos.
+
+## Coleções emprestadas (0.3)
+
+```tom
+DefStructSOAxItem
+PropFl64xx
+PropBlxativo
+FimDef
+DefFuncaoxAtivar[RefSOA<Item>xItens]yInSd64
+SetVarBlxItens@0.ativoyVerdadeiro
+ComprimentoSOA[@Itens]
+Retornarx@ULTIMO
+FimFuncao
+DefArraySoAxDadosxItemx8
+ChamarxAtivar[@Dados]
+```
+
+`SOA<Item>` permite leitura; `RefSOA<Item>` permite atribuições e repasse mutável.
+O tipo da estrutura deve corresponder. A referência leva seu comprimento;
+`ComprimentoSOA` retorna `InSd64`. Índices continuam verificados dentro da função,
+inclusive em referências repassadas. Não há cópia da coleção, redimensionamento
+ou escape da referência. Uma referência somente leitura não pode ser usada com
+`SetVar`, `ParaCadaSOA` ou parâmetro mutável. A declaração de coleção executada
+novamente reinicializa todos os campos, incluindo `Bl` como falso.
+
+## Matemática e sorteio (0.3)
+
+| Operação | Contrato |
+|---|---|
+| `InSd32ParaFl64[I]`, `InSd64ParaFl64[I]` | Fl64; valores de 64 bits podem ser arredondados como binary64 |
+| `Fl64ParaInSd32[F]`, `Fl64ParaInSd64[F]` | Truncamento em direção a zero, com faixa verificada; NaN e infinito são inválidos |
+| `PotenciaFl64[BASE,EXPOENTE]` | Fl64; entradas e resultado precisam ser finitos; domínio inválido/overflow propagam erro |
+| `Exigir[CONDICAO]` | Bl verdadeiro retorna normalmente; falso lança erro 4, útil para pré-condições em bibliotecas |
+| `SorteadorCriar[SEMENTE,SEQUENCIA]` | Recurso PCG32; dois InUd64, sequência limitada a 0..9223372036854775807 |
+| `SortearInteiro[@R,LIMITE]` | InUd32 no intervalo `[0,LIMITE)`; limite InUd32 maior que zero; exige RefSorteador |
+
+O sorteador usa PCG XSH RR 64/32 com rejeição para eliminar viés do limite.
+Semente, sequência e limites idênticos produzem os mesmos inteiros em Windows e
+Linux. Não se destina à criptografia. Potência usa a biblioteca matemática nativa;
+não promete igualdade bit a bit entre plataformas para resultados transcendentes.
+
+Os novos recursos `Sorteador`, `Visual`, `Audio` e `Som` seguem o cadastro central
+de tipos e destrutores. Podem ser emprestados a funções, mas não retornados.
+Uma visualização mantém sua janela proprietária; um som mantém seu mixer.
+Os `Defer` do usuário executam antes das liberações automáticas, inclusive em erro.
+O [contrato multimídia](multimedia-0.3.md) detalha tempo, entrada, desenho e áudio.
+`@ULTIMO` conserva suas restrições: estado persistente precisa de variáveis.
+
+## Animações e acabamento 2D
+
+As transformações de visuais, formas arredondadas e bibliotecas `tom/cores`,
+`tom/animacao` e `tom/efeitos` estão descritas no [contrato visual](visual-2d.md).
+O desenho com tema é opt-in; `UIDesenhar` mantém sua aparência anterior.

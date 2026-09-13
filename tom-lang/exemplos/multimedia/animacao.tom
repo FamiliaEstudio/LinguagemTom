@@ -1,0 +1,32 @@
+Importar[l'./comum.tom']
+DefRecursoxJyJanelaCriar[l'Tom 0.3 — Animação',800,360]
+DefRecursoxFyFonteCarregar[22]
+DefRecursoxTituloyVisualTextoCriar[@J,@F,l'Animação pelo tempo — Escape fecha']
+DefRecursoxEyEventoCriar[]
+TempoAgoraNs[]
+DefVarInSd64xOrigemy@ULTIMO
+DefVarInSd64xProximoy@Origem
+DefVarBlxRodandoyVerdadeiro
+Enquantox@Rodando
+TempoAgoraNs[]
+DefVarInSd64xAgoray@ULTIMO
+CompararMaiorIgualxyInSd64x@Agoray@Proximo
+Sex@ULTIMO
+SubtrxyInSd64x@Agoray@Origem
+ChamarxDemoPosicao[@ULTIMO]
+DefVarFl64xXy@ULTIMO
+JanelaLimpar[@J,@DEMO_FUNDO]
+DesenharVisual[@J,@Titulo,30.0,48.0,@DEMO_TEXTO]
+DesenharLinha[@J,40.0,180.0,760.0,180.0,2.0,@DEMO_CINZA]
+DesenharElipse[@J,@X,180.0,16.0,12.0,@DEMO_DESTAQUE]
+JanelaApresentar[@J]
+SomarxyInSd64x@Agoray16666667
+SetVarInSd64xProximoy@ULTIMO
+FimSe
+EventoAguardarAte[@J,@E,@Proximo]
+Sex@ULTIMO
+ChamarxDemoEncerrar[@E]
+NaoBlx@ULTIMO
+SetVarBlxRodandoy@ULTIMO
+FimSe
+FimEnquanto

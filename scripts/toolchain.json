@@ -1,4 +1,9 @@
 {
+  "yyjson": {
+    "url": "https://codeload.github.com/ibireme/yyjson/tar.gz/refs/tags/0.12.0",
+    "file": "yyjson-0.12.0.tar.gz",
+    "sha256": "b16246f617b2a136c78d73e5e2647c6f1de1313e46678062985bdcf1f40bb75d"
+  },
   "nodeVersion": "24.21.0",
   "llvmVersion": "21.1.8",
   "nodeLinux": {
@@ -70,5 +75,15 @@
     "file": "llvm-ci.sh",
     "url": "https://apt.llvm.org/llvm.sh",
     "sha256": "03878e08f47b66cc95bc4b544b0db3c6d9ce8d60e6cf2492ae357984330a9eae"
+  },
+  "bravura": {
+    "url": "https://raw.githubusercontent.com/steinbergmedia/bravura/bravura-1.482/redist/otf/Bravura.otf",
+    "file": "Bravura.otf",
+    "sha256": "cdf0f893ee1fdb64b7f6713d71ee0dcfc349c0ac01429a8e451b01a9e79f5f3b"
+  },
+  "bravuraLicense": {
+    "url": "https://raw.githubusercontent.com/steinbergmedia/bravura/bravura-1.482/LICENSE.txt",
+    "file": "Bravura.LICENSE",
+    "sha256": "bdca252186865f3b2c0e76da4a4e335c14ba1d37f80194fca254ddfa88e84fbf"
   }
 }

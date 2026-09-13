@@ -1,0 +1,38 @@
+Importar[l'./comum.tom']
+DefFuncaoxDemoTecla[RefJanelaxJ,FontexF,InSd32xFisica,InSd32xX,TxtxRotulo]yVazio
+DefVarInUd32xCory@DEMO_CINZA
+TeclaMantida[@J,@Fisica]
+Sex@ULTIMO
+SetVarInUd32xCory@DEMO_ATIVA
+FimSe
+DesenharRetangulo[@J,@X,140,72,80,@Cor]
+SomarxyInSd32x@Xy22
+DesenharTexto[@J,@F,@Rotulo,@ULTIMO,164,4294967295]
+FimFuncao
+DefRecursoxJyJanelaCriar[l'Tom 0.3 — Teclado',840,300]
+DefRecursoxFyFonteCarregar[24]
+DefRecursoxEyEventoCriar[]
+DefStkFB64CxUltimoyl'Nenhum evento de tecla'
+JanelaEventosCompletos[@J,Verdadeiro]
+DefVarBlxRodandoyVerdadeiro
+Enquantox@Rodando
+JanelaLimpar[@J,@DEMO_FUNDO]
+DesenharTexto[@J,@F,l'Mantenha várias teclas; troque o foco; solte-as.',24,24,@DEMO_TEXTO]
+DesenharTexto[@J,@F,@Ultimo,24,76,@DEMO_TEXTO]
+ChamarxDemoTecla[@J,@F,@FISICA_A,24,l'A']
+ChamarxDemoTecla[@J,@F,@FISICA_B,112,l'B']
+ChamarxDemoTecla[@J,@F,@FISICA_C,200,l'C']
+ChamarxDemoTecla[@J,@F,@FISICA_D,288,l'D']
+ChamarxDemoTecla[@J,@F,@FISICA_E,376,l'E']
+ChamarxDemoTecla[@J,@F,@FISICA_F,464,l'F']
+ChamarxDemoTecla[@J,@F,@FISICA_G,552,l'G']
+ChamarxDemoTecla[@J,@F,@FISICA_W,640,l'W']
+ChamarxDemoTecla[@J,@F,@FISICA_R,728,l'R']
+JanelaApresentar[@J]
+EventoAguardar[@J,@E]
+ChamarxDemoEncerrar[@E]
+NaoBlx@ULTIMO
+SetVarBlxRodandoy@ULTIMO
+EventoCampo[@E,@CAMPO_TECLA]
+InteiroParaTexto[@ULTIMO,@Ultimo]
+FimEnquanto

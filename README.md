@@ -1,16 +1,29 @@
-# Linguagem Tom 0.2
+# Linguagem Tom 0.4
 
 Linguagem brasileira do Pipim Studios, com instruções lineares e tipos explícitos.
 O núcleo CPU gera LLVM e oferece funções, condições, laços, exceções, buffers UTF-8,
-aritmética decimal de 34 dígitos e interface 2D com SDL3.
+aritmética decimal de 34 dígitos, interface 2D e áudio com SDL3.
 
 A [calculadora](tom-lang/exemplos/calculadora.tom) é escrita em Tom: entrada, estado,
 operações sequenciais e desenho. O runtime fornece operações gerais de texto,
 números, janela, eventos e desenho.
 
+A versão 0.3 acrescenta módulos, constantes, coleções compartilhadas, relógio,
+teclado simultâneo, visuais preparados e áudio agendado. A biblioteca
+[`tom/musica`](tom-lang/stdlib/musica.tom) e as [demonstrações técnicas](tom-lang/exemplos/multimedia/README.md)
+preparam aplicações musicais. O [Musical Tom 0.1](jogos/musical-tom/README.md) usa essa base
+para treinar leitura em sol e fá, com pontos, três modalidades e progresso local.
+
+A versão 0.4 acrescenta registros e enumerações, iteração geral e as bibliotecas
+`tom/entrada`, `tom/dados`, `tom/ui`, `tom/sessao` e `tom/replay`. O
+[laboratório integrado](tom-lang/exemplos/estado/README.md) reúne pauta animada,
+ações remapeáveis, tons/WAV, controles, calibração, arquivos JSON e reprodução.
+Veja o [contrato 0.4](tom-lang/docs/state-0.4.md) e a
+[validação reproduzível](tom-lang/docs/validation-0.4.md).
+
 ## O que está implementado
 
-O compilador atual é `tom-lang/tomc.js`. A [referência do núcleo 0.2](tom-lang/docs/core-language.md)
+O compilador atual é `tom-lang/tomc.js`. A [referência do núcleo 0.4](tom-lang/docs/core-language.md)
 define a sintaxe e o comportamento suportados; o [manifesto de exemplos](tom-lang/exemplos/manifest.json)
 identifica quais programas devem executar e quais devem receber diagnóstico de recurso experimental.
 
@@ -21,20 +34,33 @@ identifica quais programas devem executar e quais devem receber diagnóstico de 
 | Controle e funções | Variáveis com escopo, comparações, `Se`/`Senao`, `Enquanto`, `Interromper`, `Continuar`, funções CPU com parâmetros e retorno tipados; preservação de `SeMaior`. |
 | Erros e limpeza | `Tentar`/`Capturar`, relançamento, localização de falhas e `Defer` em ordem inversa nas saídas de escopo, inclusive propagação de erro. Recursos automáticos têm duração lexical. |
 | Texto | Literais UTF-8, impressão segura de `%` e buffers `FBnC` mutáveis em execução, com capacidade verificada antes de alterar o destino. |
-| SOA | Estruturas e arrays com limites verificados, reinicialização por declaração e `ParaCadaSOA` para adição inteira. |
-| Interface 2D | Runtime com ABI C, SDL3 e SDL_ttf: janela, eventos de teclado/mouse, redimensionamento, retângulos, texto UTF-8 e apresentação de quadros. |
+| Bibliotecas | `Importar`, constantes numéricas/booleanas, resolução de módulos pela CLI e editor; sem inicialização implícita. |
+| SOA | Estruturas com propriedades numéricas e `Bl`, comprimento e índices verificados, parâmetros `SOA<Nome>`/`RefSOA<Nome>`, reinicialização por declaração. |
+| Matemática | Conversões explícitas entre signed 32/64 e Fl64, potência finita e sorteador PCG32 com semente e sequência reproduzíveis. |
+| Tempo e entrada | Relógio monotônico em nanossegundos, espera com prazo, teclas lógicas/físicas, pressionar/soltar, repetição, combinações e foco. |
+| Interface 2D | [Animações e acabamento](tom-lang/docs/visual-2d.md): transformações, formas arredondadas, gradientes, temas e partículas em Tom. SDL3/SDL_ttf, escala lógica, redimensionamento, recorte, retângulos, linhas, elipses, fontes por caminho e texto/glifos preparados como `Visual`. |
+| Áudio | Mixer estéreo 48 kHz, 32 canais, tons senoidais, WAV, repetição, volumes, pausa, fila limitada e início agendado por amostra. |
+| Música | Notas com escrita preservada, frequência, posição nas claves de sol e fá, durações racionais e glifos SMuFL com Bravura 1.482. |
+| Estado e iteração | Registros aninhados por valor, `RefRegistro`, enumerações nominais, `Para` e `ParaIndiceSOA`, cópias decimais transacionais e limpeza por iteração. |
+| Entrada e componentes | Ações com combinações, repetição e remapeamento; botões, rótulos, seletores, deslizantes, foco, Tab/setas e arraste em bibliotecas Tom. |
+| Persistência | `DadosUsuario`, gravação atômica e JSON limitado com yyjson 0.12.0; UTF-8 e números exatos, formatos versionados e publicação após validação. |
+| Sessões e recursos | Catálogos de visuais/sons com IDs verificados, relógio coerente de áudio, pausas, calibração e gravação/reprodução independente do desenho. |
 | Calculadora | Mouse e teclado, quatro operações sequenciais, decimal com ponto/vírgula, repetir `=`, trocar sinal, limpar, apagar e recuperar-se de erros sem fechar a janela. |
-| VS Code | Extensão local 0.2.1 com cores para funções, variáveis, parâmetros, tipos e literais, além de snippets e diagnósticos do compilador. |
+| Musical Tom | Jogo em pasta própria: Aprender, Movimento e Ritmo, sol/fá, acidentes, fundos livres, desbloqueios e perfil JSON local. [Jogar e compilar](jogos/musical-tom/README.md). |
+| VS Code | Extensão local 0.4.0 com cores, snippets e diagnósticos que acompanham módulos, inclusive alterações ainda não salvas. |
 | Ferramentas | Instaladores locais, versões fixadas, testes de regressão e workflow de CI para Windows e Linux. |
 
 ### Limitações atuais
 
+- Registros não embutem textos, recursos ou coleções. SOA, catálogos e gravações têm capacidade fixa explícita; não há listas dinâmicas ou gravação ilimitada.
 - Funções CPU não têm recursão, closures, sobrecarga ou callbacks. Referências emprestadas não podem escapar da chamada.
 - `@ULTIMO` pertence ao bloco; resultados entre blocos exigem variáveis explícitas. Textos estáticos só podem ser alterados no nível superior; use `FBnC` para mutação em execução.
 - `ParaCadaSOA` com float é rejeitado. Não há otimização automática de layout nem promessa de vetorização ou de quantidade fixa de ciclos.
 - A calculadora executa na ordem dos comandos: `2 + 3 × 4 =` resulta em `20`. Ela não analisa expressões nem parênteses.
 - Os builds locais de referência são Windows x64 com LLVM-MinGW/UCRT e Linux x64 com glibc e X11/XWayland, incluindo WSLg. Outras arquiteturas e ambientes gráficos não estão validados.
 - A extensão é instalada por VSIX local. O pacote gerado neste repositório não depende de publicação no Marketplace.
+- A posição de áudio mede quadros processados pelo mixer. Sua correlação com o relógio e a chegada ao dispositivo são estimativas; a compensação de latência depende de calibração.
+- WAV é carregado integralmente com limite explícito de memória. Não há streaming de arquivos longos; formatos aceitos e limites estão no [contrato multimídia](tom-lang/docs/multimedia-0.3.md).
 
 ## Planos futuros e pesquisa
 
@@ -49,6 +75,8 @@ Comandos experimentais são rejeitados explicitamente pelo núcleo atual.
 | `Comptime` | Definir uma avaliação controlada e verificável em compilação; a execução de JavaScript do compilador antigo não integra o núcleo atual. |
 | SOA e otimizações | Implementar operações float e transformações estruturadas de layout/vetorização, comprovando que preservam resultados e textos literais. |
 | Segurança e orçamento de execução | Definir e implementar as propostas de regiões/`Inseguro`, ciclos e LiveBudget. Os [estudos Tom Live](PesquisaTomLive.md) ainda não representam garantias da linguagem. |
+| Evolução de Musical Tom | Acordes, outras claves, figuras rítmicas variadas, importação de partituras e execução das melodias completas pelo jogador. |
+| Formatos e instrumentos | Instrumentos realistas, streaming, MP3/OGG, MIDI, MusicXML, microfone e interpretação completa de partituras. |
 
 O [compilador anterior e seus artefatos](tom-lang/experimental/README.md), o host GPU
 e os exemplos antigos de jogos são material de pesquisa. A interface SDL3 da
@@ -74,8 +102,22 @@ node tom-lang/tomc.js --run tom-lang/exemplos/calculadora.tom
 ```
 
 Os instaladores guardam Node 24.21.0, LLVM 21.1.8, CMake, Ninja, SDL3 3.4.16,
-SDL_ttf 3.2.2 e libmpdec 4.0.1 em `.tools/`, sem alterar o PATH global.
+SDL_ttf 3.2.2, libmpdec 4.0.1 e yyjson 0.12.0 em `.tools/`, sem alterar o PATH global.
 Consulte os [pré-requisitos e instruções WSL](scripts/README.md).
+
+Para abrir as novas demonstrações, depois de ativar o mesmo ambiente:
+
+```text
+node tom-lang/tomc.js --run --assets tom-lang/exemplos/multimedia/assets tom-lang/exemplos/estado/laboratorio.tom
+node tom-lang/tomc.js --run tom-lang/exemplos/multimedia/animacao.tom
+node tom-lang/tomc.js --run tom-lang/exemplos/multimedia/teclado.tom
+node tom-lang/tomc.js --run tom-lang/exemplos/multimedia/catalogo.tom
+node tom-lang/tomc.js --run --assets tom-lang/exemplos/multimedia/assets tom-lang/exemplos/multimedia/audio.tom
+```
+
+No áudio, A–G tocam notas e Espaço pausa/retoma; Escape fecha cada demonstração.
+`--assets DIRETORIO` inclui arquivos próprios em `assets/` no pacote. Bravura e sua
+licença são incluídas automaticamente ao importar `tom/musica`.
 
 `--build` verifica o LLVM, compila e publica uma pasta independente. Copie **toda**
 a pasta `tom-lang/exemplos/build/<plataforma-arquitetura-abi>/calculadora/` para distribuir a aplicação da
@@ -95,7 +137,7 @@ A [extensão Tom](tom-lang/README.md) distingue funções, variáveis, parâmetr
 textos e comentários respeitando o tema do editor. Gere o pacote com
 `npm ci --prefix tom-lang --ignore-scripts` e
 `npm --prefix tom-lang run package:extension`; instale
-`tom-lang/build/tom-lang-0.2.1.vsix` pelo menu **Extensões → … → Instalar do VSIX**.
+`tom-lang/build/tom-lang-0.4.0.vsix` pelo menu **Extensões → … → Instalar do VSIX**.
 
 ## Testes
 
@@ -105,6 +147,8 @@ Depois de ativar o ambiente:
 npm ci --prefix tom-lang --ignore-scripts
 npm --prefix tom-lang test
 node scripts/verify-desktop.js
+node scripts/verify-multimedia.js
+node scripts/verify-state.js
 ```
 
 A suíte verifica LLVM e executa programas em `-O0` e `-O2`, incluindo os 43 casos
@@ -114,21 +158,51 @@ teclado, mouse, redimensionamento e fechamento exclusivamente à aplicação cri
 pelo teste. No WSL exige WSLg; em Linux exige `DISPLAY`. Capturas e logs ficam em
 `.tools/<plataforma>/validation/`. [Resultados locais](tom-lang/docs/validation-0.2.md).
 
+A validação 0.3 acrescenta módulos, SOA emprestada, PCG, teclado/foco, métricas de
+glifos e mixer renderizado em memória. `verify-multimedia.js` exercita as quatro
+demonstrações em O0/O2 com drivers simulados; `--desktop` abre janelas reais e
+`--package` executa os pacotes de produção com o ambiente de desenvolvimento
+removido. `verify-audio-device.js` reproduz um som curto no dispositivo real.
+Consulte [procedimentos e resultados da 0.3](tom-lang/docs/validation-0.3.md).
+
+A validação 0.4 acrescenta registros, enumerações, iteração, JSON, componentes e
+reprodução da mesma lógica do laboratório a 30/60/144 FPS. `verify-state.js`
+exercita as quatro demonstrações; `--desktop` valida janelas reais e `--package`
+valida os executáveis distribuíveis. [Resultados 0.4](tom-lang/docs/validation-0.4.md).
+
 A [CI](.github/workflows/core.yml) está configurada para executar testes em Linux e Windows.
 O estado de cada execução remota deve ser consultado no [GitHub Actions](https://github.com/FamiliaEstudio/LinguagemTom/actions).
 Dependências ausentes causam falha; testes nativos não são silenciosamente ignorados.
+
+## Calculadora C e benchmarking
+
+Há uma [versão C17 da calculadora e estrutura de benchmark](benchmarks/calculator/README.md)
+usando os mesmos runtimes decimal e SDL3 da Tom. Os testes comparam valores,
+mensagens e desenho antes de medir processamento sem renderização, desenho em
+software e espera ociosa. As amostras e os relatórios ficam em `build/`, fora do Git.
+
+```text
+npm --prefix tom-lang run calculator:c
+npm --prefix tom-lang run benchmark:verify
+node benchmarks/calculator/run.js --quick
+```
+
+A comparação caracteriza as implementações atuais de Tom e C. Python e C# ainda
+não têm versões nesse benchmark. Consulte o guia para a metodologia e as limitações.
 
 ## Organização
 
 - `tom-lang/core/`: parser, tipos e emissão LLVM; `compile()` é uma API pura.
 - `tom-lang/core/native-build.js` e `tom-lang/tomc.js`: ferramentas, link e publicação.
 - `tom-lang/runtime/stable/`: ABI C para texto, decimais e SDL; sem lógica de calculadora.
+- `tom-lang/stdlib/`: módulos Tom de música, entrada, dados, interface, sessão e reprodução.
 - `tom-lang/exemplos/`: programas e manifesto com resultados esperados.
 - `tom-lang/extension.js`, `snippets.json`, `syntaxes/`: editor com os mesmos diagnósticos.
 - `tom-lang/tests/`: regressões e execução nativa.
+- `benchmarks/calculator/`: calculadora C, roteiro comparativo e instrumentos de medição.
 - `tom-lang/experimental/`: protótipos e artefatos anteriores, preservados para pesquisa.
 
-Novos artefatos ficam em `build/` e `.tools/`, ignorados pelo Git. A extensão 0.2
+Novos artefatos ficam em `build/` e `.tools/`, ignorados pelo Git. A extensão 0.3
 deve ser empacotada a partir destes fontes; os VSIX históricos não contêm o núcleo
 atual. O [README histórico](tom-lang/docs/history/README-original.md) preserva as propostas antigas
 e não deve ser usado como referência de recursos implementados.

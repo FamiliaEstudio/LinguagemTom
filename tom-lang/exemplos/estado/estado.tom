@@ -1,0 +1,23 @@
+// Registros, enumeração, empréstimos, retorno e iteração geral.
+DefEnumxSituacao
+ItemxPronta
+ItemxConcluida
+FimDef
+DefRegistroxContador
+PropInSd64xvalor
+PropEnum<Situacao>xsituacao
+FimDef
+DefFuncaoxIncrementar[RefRegistro<Contador>xEstado]yVazio
+SomarxyInSd64x@Estado.valory1
+SetVarInSd64xEstado.valory@ULTIMO
+FimFuncao
+DefVarRegistro<Contador>xEstadoyPadrao
+ParaxI[0,5,1]
+ChamarxIncrementar[@Estado]
+FimPara
+SetVarEnum<Situacao>xEstado.situacaoy@Situacao.Concluida
+DefStkFB32CxTextoyl''
+InSd64ParaTexto[@Estado.valor,@Texto]
+GerarTxtxl'Contador: '
+GerarTxtxTexto
+GerarTxtxl'\n'

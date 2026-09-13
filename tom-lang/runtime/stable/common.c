@@ -1,5 +1,7 @@
 #include "tom_runtime.h"
 static int64_t live_objects, peak_objects;
+static int64_t handle_id;
+int32_t tom_handle_next(int64_t *out) { if(!out)return TOM_INVALID;if(handle_id==INT64_MAX)return TOM_OVERFLOW;*out=++handle_id;return TOM_OK; }
 void tom_object_acquired(void) { live_objects++; if (live_objects > peak_objects) peak_objects = live_objects; }
 void tom_object_released(void) { live_objects--; }
 int64_t tom_peak_objects(void) { return peak_objects; }
@@ -13,7 +15,8 @@ const char *tom_error_message(int32_t code) {
     case TOM_CAPACITY: return "Capacidade do buffer excedida.";
     case TOM_BOUNDS: return "Índice fora do limite.";
     case TOM_MEMORY: return "Memória insuficiente.";
-    case TOM_RESOURCE: return "Falha no recurso gráfico.";
+    case TOM_RESOURCE: return "Falha de recurso (janela, áudio ou arquivo).";
+    case TOM_LATE: return "A posição de áudio solicitada já foi processada.";
     default: return "Erro interno do runtime.";
   }
 }

@@ -1,11 +1,18 @@
-# Runtime estável Tom 0.2
+# Runtime estável Tom 0.3
 
-ABI C em [tom_runtime.h](tom_runtime.h), dividida em `tom_text`, `tom_decimal` e
-`tom_ui`. As operações devolvem código `int32_t`; resultados usam o último
+ABI C em [tom_runtime.h](tom_runtime.h), dividida em `tom_text`, `tom_decimal`,
+`tom_ui`, `tom_platform`, `tom_math` e `tom_audio`. As operações devolvem código `int32_t`; resultados usam o último
 parâmetro de saída, exceto operações cujo destino é explícito. Saídas de novos
 handles devem começar em NULL. A falha preserva o destino. Handles pertencem ao
 compilador; o programa Tom não recebe ponteiros. Funções `free(NULL)` são seguras.
 Não há exceções C++ nem lógica específica de calculadora.
+
+O [contrato multimídia 0.3](../../docs/multimedia-0.3.md) lista as assinaturas de
+tempo, teclado, fontes, visuais e áudio, incluindo limites, erros e duração de vida.
+`platform.c` administra as referências independentes aos subsistemas SDL.
+`audio.c` contém o mixer de 32 canais/48 kHz e sua fila de 256 comandos; o callback
+usa o mesmo processamento testado em memória, sem executar Tom.
+`math.c` implementa conversões, potência finita, pré-condições e PCG32.
 
 `core/builtins.js` define as assinaturas Tom e sua correspondência C. A CLI compila
 os fontes necessários no mesmo alvo e otimização do programa. Também é possível
@@ -44,8 +51,13 @@ Teclas imprimíveis devem ser tratadas pelo evento **texto**, evitando dupla
 entrada; tecla Enter é 13, Escape 27, Backspace 8. Enter numérico é normalizado
 para 13. Os outros códigos seguem SDL_Keycode. Mouse esquerdo é botão 1.
 Eventos são da fila SDL do processo; as coordenadas do mouse são convertidas para
-a resolução lógica da janela passada à espera/consulta. Aplicações com várias
+a resolução lógica da janela de origem. Aplicações com várias
 janelas precisam considerar o ID do evento ao despachar suas ações.
+
+Eventos completos são opt-in por janela: soltura=7, perda de foco=8, ganho=9.
+Campos novos: 9 posição física e 10 modificadores. `EventoTempoNs` preserva o
+timestamp SDL em InSd64 e `EventoAguardarAte` usa um prazo absoluto desse relógio.
+O estado mantido acompanha os eventos consumidos e é limpo na perda de foco.
 
 Toda operação de janela, evento e desenho ocorre na thread principal. A janela
 usa escala lógica com letterbox e alta densidade; o mouse passa pela conversão
@@ -61,6 +73,9 @@ MinGW UCRT, separada de Linux. Não misture bibliotecas MSVC/MinGW ou versões d
 Linux com glibc incompatível. O pacote inclui DLLs/SOs, dependências de FreeType,
 fonte DejaVu Sans e licenças; não distribui Node ou LLVM. Linux conserva as
 bibliotecas básicas do sistema (glibc, loader, X11) como pré-requisitos do desktop.
+Linux habilita PulseAudio e ALSA; seus clientes e dependências acompanham o pacote.
+O diretório `alsa/` contém configuração para libasound. Windows usa o SDL oficial
+com suporte a WASAPI. Bravura 1.482 e sua licença acompanham `tom/musica` em assets.
 
 ```bash
 # Depois de preparar scripts/setup-linux.sh e carregar scripts/env.sh:
@@ -80,3 +95,29 @@ adicional. O host GPU em `../tom_gpu_host.cpp` continua experimental e independe
 texto e captura de quadro. Builds normais não consultam essas variáveis de teste.
 `tom_live_objects`/`tom_peak_objects` permitem verificar a propriedade dos recursos
 sem expor essas operações na linguagem.
+
+`TOM_AUDIO_TEST` expõe somente ao harness C criação de mixer sem dispositivo e
+renderização em memória. Builds normais não incluem essas entradas. Destrutores
+nativos aceitam NULL, mas cada handle liberado deve ser descartado/zerado pelo
+chamador C; usar novamente um handle liberado não é válido. A Tom faz isso
+automaticamente. Som retém seu Audio e Visual retém sua Janela; fechar o dono
+invalida o uso, mas adia a liberação estrutural até terminar a dependência.
+
+## Acréscimos 0.4
+
+`tom_data` usa SDL_GetPrefPath e arquivos UTF-8, com leitura limitada e substituição
+atômica por temporário vizinho. `tom_json` usa yyjson 0.12.0 estático com alocador
+limitado, tokens numéricos preservados e alterações transacionais. O setup fixa
+SHA-256 e instala a licença MIT; ambos os alvos foram acrescentados ao CMake.
+
+`tom_ui` acrescenta movimento/soltura opt-in e catálogos de texturas; `tom_audio`
+acrescenta catálogos WAV e uma leitura coerente de posição/âncora/pausa. Catálogos
+retêm seus proprietários, IDs não são reutilizados e remoção de som cancela vozes
+ativas e comandos antes de liberar memória. `common.c` mantém a contagem de objetos
+usada pelos testes de limpeza. `math.c` fornece multiplicação/divisão intermediária
+128 bits com resultado64 verificado.
+
+Ações, componentes, configuração, sessão e replay são bibliotecas `.tom`, não
+comportamentos específicos no runtime. Consulte o [contrato 0.4](../../docs/state-0.4.md).
+Injeção de eventos, relógios, diretório de dados e traces é compilada somente com
+`TOM_UI_TEST`; builds públicos ignoram essas variáveis.

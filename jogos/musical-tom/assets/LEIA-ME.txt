@@ -1,0 +1,19 @@
+Musical Tom 0.1.0 — leitura de partitura
+
+Abra musical-tom.exe no Windows ou ./musical-tom no Linux.
+Mantenha toda a pasta: bibliotecas, fontes e assets acompanham o programa.
+
+Comece em Aprender / Sol. C D E F G A B correspondem a Dó Ré Mi Fá Sol Lá Si.
+Segure W para sustenido ou R para bemol e pressione a letra.
+F1 revela a resposta sem pontos; Escape pausa. Tab/Enter navegam na interface.
+Configurações permitem remapear teclas e ajustar volumes/compensações.
+Reduzir movimento desativa partículas, pulsações e deslocamentos decorativos.
+O movimento que faz parte das modalidades e as regras de pontuação são preservados.
+
+Cada rodada tem 20 notas. Acertar de primeira sem ajuda vale 10 pontos.
+Duas rodadas com 18 acertos pontuáveis conquistam domínio da seleção.
+Pontos e domínio abrem Movimento, Fá, acidentes, Ritmo, velocidades e fundos.
+
+O perfil fica em PipimStudios/MusicalTom no diretório de dados do usuário.
+Se salvar falhar, o progresso continua em memória: use Salvar novamente.
+Os fundos musicais e seus créditos estão em assets/CREDITOS.md.

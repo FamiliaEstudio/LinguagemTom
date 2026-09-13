@@ -51,6 +51,16 @@ test('runtime calls and resources are highlighted even with the E prefix', () =>
   has('DeferChamarxLimpar[@Buffer]', 'Limpar', 'entity.name.function.tom');
   has('DeferAnexarTxt[@Buffer,l\'D\']', 'AnexarTxt', 'support.function.tom');
 });
+test('0.3 imports, constants, borrowed collections and musical calls have stable scopes', () => {
+  has("Importar[l'tom/musica']", 'Importar', 'keyword.control.tom');
+  has('DefConstInSd64xORIGEMy0', 'ORIGEM', 'variable.other.constant.tom');
+  has('DefFuncaoxDesenhar[RefSOA<Nota>xNotas,AudioxA]yVazio', 'SOA<Nota>', 'support.type.tom');
+  has('DefFuncaoxDesenhar[RefSOA<Nota>xNotas,AudioxA]yVazio', 'Notas', 'variable.parameter.tom');
+  has('PropBlxativa', 'Bl', 'support.type.tom');
+  has('ComprimentoSOA[@Notas]', 'ComprimentoSOA', 'keyword.control.tom');
+  has('AudioAgendarTom[@A,0,440.0,0.1,1000,0]', 'AudioAgendarTom', 'support.function.tom');
+  has('EventoTempoNs[@E]', 'EventoTempoNs', 'support.function.tom');
+});
 test('strings and comments protect names, percent signs, escapes and command delimiters', () => {
   const line = "GerarTxtxl'DefFuncaoxF // @A %s 🐈 \\'fim\\'' // @B Somar";
   const ts = tokens(line);
@@ -76,4 +86,16 @@ test('the complete calculator tokenizes without losing state or classifying stab
     assert.ok(result.tokens.every(t => !t.scopes.includes('invalid.deprecated.tom')), line);
   }
   assert.equal(state.depth, 1);
+});
+
+test('0.4 nominal declarations, nested properties and range indices retain distinct scopes', () => {
+  has('DefRegistroxSessao', 'Sessao', 'entity.name.type.struct.tom');
+  has('DefEnumxFase', 'Fase', 'entity.name.type.struct.tom');
+  has('DefVarRegistro<Sessao>xEstadoyPadrao', 'Registro<Sessao>', 'support.type.tom');
+  has('SetVarInSd64xEstado.relogio.origemNsy1', 'origemNs', 'variable.other.property.tom');
+  has('DefFuncaoxPausar[RefRegistro<Sessao>xEstado]yVazio', 'Estado', 'variable.parameter.tom');
+  has('ParaxI[0,10,1]', 'Para', 'keyword.control.tom');
+  has('ParaIndiceSOAxI[@Itens]', 'ParaIndiceSOA', 'keyword.control.tom');
+  has('SOAComprimento[@Itens]', 'SOAComprimento', 'keyword.control.tom');
+  has("JsonObterInSd64[@J,l'/origemNs']", 'JsonObterInSd64', 'support.function.tom');
 });

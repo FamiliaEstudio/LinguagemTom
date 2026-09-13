@@ -1,0 +1,107 @@
+'use strict';
+const test=require('node:test');const {run,start,eq}=require('./helpers');
+const gates=[
+ [1,0,60,false,300],[0,1,60,false,600],[0,0,60,true,1000],
+ [2,0,60,false,1400],[1,0,90,false,1800],[2,0,120,false,2600]
+];
+for(const optimize of ['-O0','-O2'])test(`musical: fronteiras de desbloqueio, enarmonia, repetição e foco ${optimize}`,()=>run(`
+ParaIndiceSOAxI[@Dominios]
+SetVarInSd64xDominios@@I.qualificadasy2
+SetVarInSd64xDominios@@I.rodadasy2
+FimPara
+${gates.map(([mode,clef,bpm,acc,xp])=>`SetVarInSd32xConfig.modoy${mode}
+SetVarInSd32xConfig.clavey${clef}
+SetVarInSd64xConfig.bpmy${bpm}
+SetVarBlxConfig.acidentesy${acc?'Verdadeiro':'Falso'}
+SetVarInSd64xPerfil.pontosy${xp-1}
+ChamarxJogoLiberado[@Perfil,@Dominios,@Config]
+NaoBlx@ULTIMO
+Exigir[@ULTIMO]
+SetVarInSd64xPerfil.pontosy${xp}
+ChamarxJogoLiberado[@Perfil,@Dominios,@Config]
+Exigir[@ULTIMO]
+`).join('')}
+SetVarInSd64xPerfil.pontosy499
+ChamarxJogoMusicaLiberada[@Perfil,@Dominios,1]
+NaoBlx@ULTIMO
+Exigir[@ULTIMO]
+SetVarInSd64xPerfil.pontosy500
+ChamarxJogoMusicaLiberada[@Perfil,@Dominios,1]
+Exigir[@ULTIMO]
+SetVarInSd64xPerfil.pontosy1199
+ChamarxJogoMusicaLiberada[@Perfil,@Dominios,2]
+NaoBlx@ULTIMO
+Exigir[@ULTIMO]
+SetVarInSd64xPerfil.pontosy1200
+ChamarxJogoMusicaLiberada[@Perfil,@Dominios,2]
+Exigir[@ULTIMO]
+ChamarxJogoPadrao[]
+SetVarRegistro<JogoConfiguracao>xConfigy@ULTIMO
+SetVarInSd32xConfig.modoy1
+SetVarInSd64xDominios@0.qualificadasy1
+ChamarxJogoLiberado[@Perfil,@Dominios,@Config]
+NaoBlx@ULTIMO
+Exigir[@ULTIMO]
+SetVarInSd32xConfig.modoy0
+${start}
+ChamarxJogoEscreverNota[@Notas,0,13,0]
+ChamarxJogoResponder[@Estado,@Notas,0,1,Falso,48]
+${eq('@Estado.cursor',0)}${eq('@Estado.erros',1)}
+ChamarxJogoResponder[@Estado,@Notas,1,-1,Falso,96]
+${eq('@Estado.cursor',1)}${eq('@Estado.pontos',0)}
+${start}
+ChamarxJogoEscreverNota[@Notas,0,8,0]
+DefVarRegistro<EntradaEvento>xEventoyPadrao
+SetVarBlxRelogio.pausadoyFalso
+SetVarInSd64xRelogio.posicaoy48
+SetVarInSd64xEvento.tempoNsy1001000000
+SetVarInSd32xEvento.tipoy@EVENTO_PRESSIONAR
+SetVarInSd32xEvento.teclay@TECLA_W
+SetVarInSd32xEvento.fisicay26
+ChamarxJogoEntrada[@Estado,@Notas,@Historico,@Vinculos,@Acoes,@Evento,@Relogio,@Evento.tempoNs]
+${eq('@Estado.cursor',0)}
+SetVarInSd64xRelogio.posicaoy96
+SetVarInSd64xEvento.tempoNsy1002000000
+SetVarInSd32xEvento.teclay@TECLA_C
+SetVarInSd32xEvento.fisicay6
+ChamarxJogoEntrada[@Estado,@Notas,@Historico,@Vinculos,@Acoes,@Evento,@Relogio,@Evento.tempoNs]
+${eq('@Estado.cursor',1)}${eq('@Estado.pontos',10)}
+SetVarInSd32xEvento.repeticaoy1
+ChamarxJogoEntrada[@Estado,@Notas,@Historico,@Vinculos,@Acoes,@Evento,@Relogio,@Evento.tempoNs]
+${eq('@Estado.cursor',1)}${eq('@Estado.pontos',10)}
+SetVarInSd32xEvento.tipoy@EVENTO_PERDER_FOCO
+ChamarxJogoEntrada[@Estado,@Notas,@Historico,@Vinculos,@Acoes,@Evento,@Relogio,@Evento.tempoNs]
+${eq('Acoes@7.mantida','Falso','Bl')}${eq('Acoes@0.mantida','Falso','Bl')}
+// A origem da tecla está num trecho pausado, embora a captura seja posterior.
+SetVarBlxRelogio.pausadoyVerdadeiro
+ChamarxSessaoAtualizar[@Estado.sessao,@Historico,@Relogio,1003000000]
+// Já capturado em pausa, mas pressionado antes dela: o acerto ainda é válido.
+DefVarInSd32xLetraAnterioryNotas@1.letra
+SetVarInSd32xEvento.tipoy@EVENTO_PRESSIONAR
+SetVarInSd32xEvento.teclayVinculos@@LetraAnterior.codigo
+SetVarInSd32xEvento.repeticaoy0
+SetVarInSd64xEvento.tempoNsy1002500000
+ChamarxJogoEntrada[@Estado,@Notas,@Historico,@Vinculos,@Acoes,@Evento,@Relogio,1004000000]
+${eq('@Estado.cursor',2)}${eq('@Estado.pontos',20)}
+SetVarBlxRelogio.pausadoyFalso
+ChamarxSessaoAtualizar[@Estado.sessao,@Historico,@Relogio,1005000000]
+ChamarxEntradaRemapear[@Vinculos,@Acoes,1005000000]
+SetVarInSd32xEvento.tipoy@EVENTO_PRESSIONAR
+SetVarInSd32xEvento.teclay@TECLA_C
+SetVarInSd32xEvento.repeticaoy0
+SetVarInSd64xEvento.tempoNsy1004000000
+ChamarxJogoEntrada[@Estado,@Notas,@Historico,@Vinculos,@Acoes,@Evento,@Relogio,1006000000]
+${eq('@Estado.cursor',2)}${eq('Acoes@0.mantida','Falso','Bl')}
+// Reajuste de 100 amostras na estimativa não pode invalidar o JSON do perfil.
+SetVarInSd64xNotas@2.inicioy1000
+ChamarxJogoResponder[@Estado,@Notas,Notas@2.letra,0,Falso,900]
+${eq('Notas@2.reacao',0)}
+SetVarInSd32xVinculos@0.codigoy@TECLA_D
+DefVarBlxCapturouyFalso
+Tentar
+ChamarxJogoValidarTeclas[@Vinculos]
+CapturarxErro
+SetVarBlxCapturouyVerdadeiro
+FimTentar
+Exigir[@Capturou]
+`,optimize));

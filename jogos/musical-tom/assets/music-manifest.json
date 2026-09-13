@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "rate": 48000,
+  "channels": 2,
+  "encoding": "PCM16LE",
+  "renderLicense": "CC0-1.0",
+  "melodies": [
+    {
+      "id": "estrelinha",
+      "title": "Brilha, Brilha, Estrelinha",
+      "author": "Tradicional; edição Fluteflute",
+      "license": "Public domain",
+      "url": "https://commons.wikimedia.org/wiki/File:Twinkle_Twinkle_Sheet_Music.png",
+      "score": "C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2 G4 G4 F4 F4 E4 E4 D4:2 G4 G4 F4 F4 E4 E4 D4:2 C4 C4 G4 G4 A4 A4 G4:2 F4 F4 E4 E4 D4 D4 C4:2"
+    },
+    {
+      "id": "frere",
+      "title": "Frère Jacques",
+      "author": "Tradicional; edição Mysid",
+      "license": "CC0-1.0",
+      "url": "https://commons.wikimedia.org/wiki/File:Fr%C3%A8re_Jacques.svg",
+      "score": "C4 D4 E4 C4 C4 D4 E4 C4 E4 F4 G4:2 E4 F4 G4:2 G4:0.5 A4:0.5 G4:0.5 F4:0.5 E4 C4 G4:0.5 A4:0.5 G4:0.5 F4:0.5 E4 C4 C4 G3 C4:2 C4 G3 C4:2"
+    },
+    {
+      "id": "ode",
+      "title": "Ode à Alegria",
+      "author": "L. van Beethoven; edição Peter Chubb / Mutopia-2009/08/05-528",
+      "license": "Public domain",
+      "url": "https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=528",
+      "score": "E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 E4:1.5 D4:0.5 D4:2 E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 D4:1.5 C4:0.5 C4:2 D4 D4 E4 C4 D4 E4:0.5 F4:0.5 E4 C4 D4 E4:0.5 F4:0.5 E4 D4 C4 D4 G3:2 E4 E4 F4 G4 G4 F4 E4 D4 C4 C4 D4 E4 D4:1.5 C4:0.5 C4:2"
+    }
+  ],
+  "files": [
+    {
+      "file": "music/estrelinha-60.wav",
+      "bpm": 60,
+      "beats": 48,
+      "frames": 2304000,
+      "bytes": 9216044,
+      "sha256": "4d186a69e1dbdda9f057da75382af2df3bafa5afb3ebb196eae660deb3594304"
+    },
+    {
+      "file": "music/estrelinha-90.wav",
+      "bpm": 90,
+      "beats": 48,
+      "frames": 1536000,
+      "bytes": 6144044,
+      "sha256": "b99b328e9e9adaaa02ba30044991c98a2193054b0a38438aa2ed1ca7fcb98a23"
+    },
+    {
+      "file": "music/estrelinha-120.wav",
+      "bpm": 120,
+      "beats": 48,
+      "frames": 1152000,
+      "bytes": 4608044,
+      "sha256": "1495db3c60ae0397ed59680d6e975276a5c88b09646ad4e6e116db852b9ee7e0"
+    },
+    {
+      "file": "music/frere-60.wav",
+      "bpm": 60,
+      "beats": 32,
+      "frames": 1536000,
+      "bytes": 6144044,
+      "sha256": "6a2bcf423c4d48ccfd596874ac79b9fccdcbb66dbe8bab4840f22ade337157a8"
+    },
+    {
+      "file": "music/frere-90.wav",
+      "bpm": 90,
+      "beats": 32,
+      "frames": 1024000,
+      "bytes": 4096044,
+      "sha256": "8ea28ad448c4e59b7d3cd359500b4694f4340a27aee8ba1e204bc1a6861051ad"
+    },
+    {
+      "file": "music/frere-120.wav",
+      "bpm": 120,
+      "beats": 32,
+      "frames": 768000,
+      "bytes": 3072044,
+      "sha256": "59c636515e98fafb98eac8ff2af320c8303cb547fd5011eb476bae1ed548979c"
+    },
+    {
+      "file": "music/ode-60.wav",
+      "bpm": 60,
+      "beats": 64,
+      "frames": 3072000,
+      "bytes": 12288044,
+      "sha256": "d5eb2d0cb0e88fcb40d29c3adc1e6bf940d2de3b5d2c4632d806ee35e4884b7d"
+    },
+    {
+      "file": "music/ode-90.wav",
+      "bpm": 90,
+      "beats": 64,
+      "frames": 2048000,
+      "bytes": 8192044,
+      "sha256": "a97062146eae5ab5602a79942f39153112a2b9a2ded310428d8ebdee33abaccb"
+    },
+    {
+      "file": "music/ode-120.wav",
+      "bpm": 120,
+      "beats": 64,
+      "frames": 1536000,
+      "bytes": 6144044,
+      "sha256": "5f255034f9c5cff6a907cb5cc1aaee01bde753722e1e862f898c22aa78d9e1f4"
+    }
+  ]
+}

@@ -4,7 +4,9 @@ const { fail, decodeString } = require('./source');
 const { typeOf, sameType, literal } = require('./types');
 const decimal = require('./decimal');
 const { builtins } = require('./builtins');
+const { resources } = require('./resources');
 const integerInput = require('./input-ir');
+const records = require('./records');
 const arg = (type, value) => ({ type, value });
 const ptr = value => arg('ptr', value);
 const returns = body => body.some(node => node.kind === 'return' || node.kind === 'rethrow' ||
@@ -16,6 +18,7 @@ class Emitter extends ScalarEmitter {
   constructor(module, fn = null) {
     super(); this.module = module; this.fn = fn;
     this.globals = module.globals; this.strings = module.strings; this.declarations = module.declarations;
+    this.symbols = new Map(module.symbols);
     this.err = fn ? '%error' : this.allocate('%TomError');
     this.flow = this.allocate('i32'); this.returnSlot = fn && fn.result !== 'Vazio' ? '%out' : null;
     this.terminated = false; this.cleanupNext = null; this.errorBindings = [];
@@ -59,6 +62,16 @@ class Emitter extends ScalarEmitter {
     return { type: typeOf('Dc34'), value: this.handle(slot), constant: value };
   }
   operand(raw, type, loc) {
+    if (type.kind === 'record') {
+      if (raw === 'Padrao') return this.recordDefault(type, loc);
+      if (raw === '@ULTIMO') {
+        if (!this.lastNumeric) fail('E_ULTIMO', '@ULTIMO sem resultado garantido neste bloco.', loc);
+        sameType(this.lastNumeric.type, type, loc); return this.lastNumeric;
+      }
+      if (!raw.startsWith('@')) fail('E_TYPE', 'Registro exige @variável ou Padrao.', loc);
+      const symbol = this.lookup(raw.slice(1), loc, 'numeric'); sameType(symbol.type, type, loc);
+      return { type, value: symbol.ptr };
+    }
     if (type.kind === 'decimal' && !raw.startsWith('@')) return this.decimalConstant(literal(raw, type, loc).constant, loc);
     return super.operand(raw, type, loc);
   }
@@ -119,7 +132,7 @@ class Emitter extends ScalarEmitter {
     }
     this.symbols = previousSymbols;
     for (const resource of [...frame.owned].reverse()) {
-      const name = resource.type === 'Dc34' ? 'tom_decimal_free' : resource.type === 'buffer' ? 'tom_text_free' : { Janela: 'tom_window_free', Fonte: 'tom_font_free', Evento: 'tom_event_free' }[resource.type];
+      const name = resource.type === 'Dc34' ? 'tom_decimal_free' : resource.type === 'buffer' ? 'tom_text_free' : resources[resource.type].free;
       this.declarations.add(`declare void @${name}(ptr)`);
       this.instruction(`call void @${name}(ptr ${this.handle(resource.ptr)})`); this.instruction(`store ptr null, ptr ${resource.ptr}`);
     }
@@ -140,8 +153,23 @@ class Emitter extends ScalarEmitter {
     this.instruction(`call i32 (ptr, ...) @printf(ptr ${this.globalString('%s')}, ptr ${pointer})`);
   }
   argument(raw, expected, loc, mutable = false) {
+    if (/^(?:Ref)?Registro</.test(expected)) return this.recordArgument(raw, this.resolved(expected.replace(/^Ref/, '')), loc, mutable || expected.startsWith('Ref'));
     if (expected === 'Txt') return ptr(this.textOperand(raw, loc));
-    if (/^(?:Ref)?(?:Buffer|Janela|Fonte|Evento)$/.test(expected) || /^FB\d+C$/.test(expected)) {
+    if (expected.startsWith('SOA<')) {
+      if (!raw.startsWith('@')) fail('E_ARGUMENT', 'SOA exige @nome.', loc);
+      const array = this.lookup(raw.slice(1), loc, 'array');
+      if (`SOA<${array.struct}>` !== expected) fail('E_TYPE', `Esperado ${expected}.`, loc);
+      if (mutable && array.mutable === false) fail('E_BORROW', 'SOA somente leitura.', loc);
+      const type = `{ i64, ${[...array.properties].map(() => 'ptr').join(', ')} }`, descriptor = this.allocate(type);
+      this.instruction(`store i64 ${array.count}, ptr ${descriptor}`);
+      let i = 1;
+      for (const property of array.properties.values()) {
+        const field = this.value(`getelementptr ${type}, ptr ${descriptor}, i32 0, i32 ${i++}`);
+        this.instruction(`store ptr ${property.ptr}, ptr ${field}`);
+      }
+      return ptr(descriptor);
+    }
+    if (resources[expected.replace(/^Ref/, '')] || /^(?:Ref)?Buffer$/.test(expected) || /^FB\d+C$/.test(expected)) {
       if (!raw.startsWith('@')) fail('E_ARGUMENT', 'Recurso exige @nome.', loc);
       const symbol = this.lookup(raw.slice(1), loc), buffer = expected.includes('Buffer') || expected.startsWith('FB');
       if (buffer ? symbol.kind !== 'buffer' : symbol.type?.name !== expected.replace(/^Ref/, '')) fail('E_TYPE', `Esperado ${expected}.`, loc);
@@ -153,9 +181,16 @@ class Emitter extends ScalarEmitter {
   }
   builtin(node, createdName) {
     const descriptor = builtins[node.name];
+    for (const [name, layout] of Object.entries(descriptor.recordLayout || {})) {
+      const type = this.module.types.get(`Registro<${name}>`);
+      if (!type || JSON.stringify(type.properties.map(p => [p.name,p.type.name])) !== JSON.stringify(layout)) fail('E_ABI', `A operação ${node.name} exige o registro ${name} declarado em tom/sessao.`, node.location);
+    }
     if (node.args.length !== descriptor.args.length) fail('E_ARGUMENT', `${node.name} exige ${descriptor.args.length} argumentos.`, node.location);
-    if (['Janela', 'Fonte', 'Evento'].includes(descriptor.result) && !createdName) fail('E_RESOURCE', 'Use DefRecurso para receber um recurso.', node.location);
-    const args = node.args.map((raw, i) => this.argument(raw, descriptor.args[i], node.location)); let slot;
+    if (resources[descriptor.result] && !createdName) fail('E_RESOURCE', 'Use DefRecurso para receber um recurso.', node.location);
+    const args = node.args.map((raw, i) => {
+      const value = this.argument(raw, descriptor.args[i], node.location);
+      return value.type === 'i1' ? arg('i32', this.value(`zext i1 ${value.value} to i32`)) : value;
+    }); let slot;
     if (descriptor.result !== 'Vazio') {
       const type = typeOf(descriptor.result);
       slot = ['decimal', 'resource'].includes(type.kind) ? this.owned(descriptor.result) : this.allocate(type.kind === 'bool' ? 'i32' : type.llvm);
@@ -173,6 +208,21 @@ class Emitter extends ScalarEmitter {
     const loc = node.location;
     switch (node.kind) {
       case 'function': return;
+      case 'record': this.define(node.name, { kind: 'recordType' }, loc); return;
+      case 'enum': {
+        const type = this.resolved(`Enum<${node.name}>`);
+        this.define(node.name, { kind: 'enumType' }, loc);
+        node.properties.forEach((member, i) => this.define(`${node.name}.${member.name}`, { kind: 'numeric', type, immutable: true, constantValue: { type, value: String(i), constant: BigInt(i) } }, member.location)); return;
+      }
+      case 'constant': {
+        const value = this.operand(node.operand, node.type, loc);
+        if (value.constant === undefined) fail('E_CONSTANT', 'Constante exige literal ou outra constante.', loc);
+        this.define(node.name, { kind: 'numeric', type: node.type, constantValue: value, immutable: true }, loc); return;
+      }
+      case 'arrayLength': {
+        const array = this.lookup(node.name, loc, 'array');
+        this.lastNumeric = { type: typeOf('InSd64'), value: String(array.count) }; return;
+      }
       case 'if': {
         const condition = this.operand(node.condition, typeOf('Bl'), loc).value;
         const yes = this.fresh('then'), no = this.fresh('else'), end = this.fresh('after_if');
@@ -189,9 +239,10 @@ class Emitter extends ScalarEmitter {
         this.block(node.body, { end: head, noEndLabel: true, loop: true, breakId, extraRoutes: [[breakId, end]] });
         this.label(end); this.invalidate(); return;
       }
+      case 'for': this.forLoop(node); return;
       case 'break': case 'continue': {
         const loop = [...this.scopes].reverse().find(x => x.loop);
-        if (!loop) fail('E_LOOP', 'Comando exige Enquanto.', loc);
+        if (!loop) fail('E_LOOP', 'Comando exige Enquanto ou Para.', loc);
         this.exit(node.kind === 'break' ? loop.breakId : loop.id); return;
       }
       case 'try': {
@@ -229,6 +280,7 @@ class Emitter extends ScalarEmitter {
         this.instruction(`store i1 true, ptr ${registration.flag}`); return;
       }
       case 'compare': {
+        if (node.type.kind === 'record' || (node.type.kind === 'enum' && !['Igual', 'Diferente'].includes(node.op))) fail('E_TYPE', 'Enum aceita apenas igualdade/desigualdade; compare os campos de registros explicitamente.', loc);
         const a = this.operand(node.left, node.type, loc), b = this.operand(node.right, node.type, loc);
         const predicate = { Igual: 'eq', Diferente: 'ne', Menor: 'lt', MenorIgual: 'le', Maior: 'gt', MaiorIgual: 'ge' }[node.op]; let expression;
         if (node.type.kind === 'decimal') {
@@ -244,6 +296,11 @@ class Emitter extends ScalarEmitter {
         this.lastNumeric = { type: typeOf('Bl'), value: this.value(`${{ Nao: 'xor', E: 'and', Ou: 'or' }[node.op]} i1 ${a}, ${b}`) }; return;
       }
       case 'declare': {
+        if (node.type.kind === 'record') {
+          const value = this.operand(node.operand, node.type, loc), slot = this.recordOwned(node.type);
+          this.recordCopy(value.value, slot, node.type, loc);
+          this.define(node.name, { kind: 'numeric', type: node.type, ptr: slot, mutable: true }, loc); return;
+        }
         const value = this.operand(node.operand, node.type, loc), slot = node.type.kind === 'decimal' ? this.owned('Dc34') : this.allocate(node.type.llvm);
         this.define(node.name, { kind: 'numeric', type: node.type, ptr: slot }, loc);
         if (node.type.kind === 'decimal') this.copyDecimal(value.value, slot, loc);
@@ -251,8 +308,11 @@ class Emitter extends ScalarEmitter {
       }
       case 'set': {
         const value = this.operand(node.operand, node.type, loc), target = this.arrayPointer(node.name, loc) || this.lookup(node.name, loc, 'numeric');
+        if (target.immutable) fail('E_CONSTANT', 'Não é permitido alterar uma constante.', loc);
+        if (target.mutable === false) fail('E_BORROW', 'SOA somente leitura.', loc);
         sameType(target.type, node.type, loc);
-        if (node.type.kind === 'decimal') this.copyDecimal(value.value, target.ptr, loc);
+        if (node.type.kind === 'record') this.recordCopy(value.value, target.ptr, node.type, loc);
+        else if (node.type.kind === 'decimal') this.copyDecimal(value.value, target.ptr, loc);
         else this.instruction(`store ${node.type.llvm} ${value.value}, ptr ${target.ptr}`);
         this.lastNumeric = value; return;
       }
@@ -287,26 +347,28 @@ class Emitter extends ScalarEmitter {
         if (!fn) fail('E_FUNCTION', `Função '${node.name}' não existe.`, loc);
         if (node.args.length !== fn.params.length) fail('E_ARGUMENT', `Função '${node.name}' exige ${fn.params.length} argumentos.`, loc);
         const args = [ptr(this.err)]; let slot, type;
-        if (fn.result !== 'Vazio') { type = typeOf(fn.result); slot = type.kind === 'decimal' ? this.owned('Dc34') : this.allocate(type.llvm); args.push(ptr(slot)); }
+        if (fn.result !== 'Vazio') { type = this.resolved(fn.result); slot = type.kind === 'record' ? this.recordOwned(type) : type.kind === 'decimal' ? this.owned('Dc34') : this.allocate(type.llvm); args.push(ptr(slot)); }
         args.push(...node.args.map((raw, i) => this.argument(raw, fn.params[i].type.name, loc, fn.params[i].mutable)));
         this.instruction(`call void @tom_fn_${node.name}(${args.map(x => `${x.type} ${x.value}`).join(', ')})`);
         const bad = this.fresh('call_error'), good = this.fresh('call_ok'), failed = this.value(`icmp ne i32 ${this.errorCode()}, 0`);
         this.instruction(`br i1 ${failed}, label %${bad}, label %${good}`); this.label(bad); this.errorBranch(); this.label(good); this.invalidate();
-        if (slot) this.lastNumeric = { type, value: this.value(`load ${type.llvm}, ptr ${slot}`) }; return;
+        if (slot) this.lastNumeric = { type, value: type.kind === 'record' ? slot : this.value(`load ${type.llvm}, ptr ${slot}`) }; return;
       }
       case 'return': {
         if (!this.fn) fail('E_RETURN', 'Retornar exige função.', loc);
         if (this.fn.result === 'Vazio') { if (node.operand) fail('E_RETURN', 'Função Vazio não retorna valor.', loc); }
         else {
           if (!node.operand) fail('E_RETURN', 'Retorno exige valor.', loc);
-          const type = typeOf(this.fn.result), value = this.operand(node.operand, type, loc);
-          if (type.kind === 'decimal') this.copyDecimal(value.value, this.returnSlot, loc);
+          const type = this.resolved(this.fn.result), value = this.operand(node.operand, type, loc);
+          if (type.kind === 'record') this.recordCopy(value.value, this.returnSlot, type, loc);
+          else if (type.kind === 'decimal') this.copyDecimal(value.value, this.returnSlot, loc);
           else this.instruction(`store ${type.llvm} ${value.value}, ptr ${this.returnSlot}`);
         }
         this.exit(this.scopes[0].id); return;
       }
       case 'read': {
         const target = this.lookup(node.name, loc, 'numeric'); sameType(target.type, node.type, loc);
+        if (target.immutable) fail('E_CONSTANT', 'Não é permitido alterar uma constante.', loc);
         this.module.needsInput = true; this.declarations.add('declare i32 @getchar()');
         const ok = this.allocate('i1'), read = this.value(`call i64 @tom_read_integer(i64 ${node.type.max}, i64 ${-node.type.min}, ptr ${ok})`);
         const bad = this.value(`xor i1 ${this.value(`load i1, ptr ${ok}`)}, true`);
@@ -316,7 +378,7 @@ class Emitter extends ScalarEmitter {
       case 'array': {
         super.emit(node); const array = this.lookup(node.name, loc, 'array');
         this.declarations.add('declare void @llvm.memset.p0.i64(ptr, i8, i64, i1)');
-        for (const property of array.properties.values()) this.instruction(`call void @llvm.memset.p0.i64(ptr ${property.ptr}, i8 0, i64 ${array.count * BigInt(property.type.bits / 8)}, i1 false)`);
+        for (const property of array.properties.values()) this.instruction(`call void @llvm.memset.p0.i64(ptr ${property.ptr}, i8 0, i64 ${array.count * BigInt(Math.max(1, property.type.bits / 8))}, i1 false)`);
         return;
       }
       default: super.emit(node);
@@ -330,13 +392,28 @@ class Emitter extends ScalarEmitter {
       if (!this.fn) return;
       this.fn.params.forEach((param, index) => {
         const incoming = `%arg${index}`;
-        if (param.type.kind === 'textview') this.define(param.name, { kind: 'textview', value: incoming }, this.fn.location);
+        if (param.type.kind === 'record') {
+          const slot = param.mutable ? incoming : this.recordOwned(param.type);
+          if (!param.mutable) this.recordCopy(incoming, slot, param.type, this.fn.location);
+          this.define(param.name, { kind: 'numeric', type: param.type, ptr: slot, mutable: true }, this.fn.location);
+        }
+        else if (param.type.kind === 'textview') this.define(param.name, { kind: 'textview', value: incoming }, this.fn.location);
+        else if (param.type.kind === 'soa') {
+          const struct = this.lookup(param.type.struct, this.fn.location, 'struct');
+          const descriptor = `{ i64, ${struct.properties.map(() => 'ptr').join(', ')} }`;
+          const properties = new Map();
+          struct.properties.forEach((p, i) => {
+            const field = this.value(`getelementptr ${descriptor}, ptr ${incoming}, i32 0, i32 ${i + 1}`);
+            properties.set(p.name, { type: p.type, ptr: this.value(`load ptr, ptr ${field}`) });
+          });
+          this.define(param.name, { kind: 'array', struct: param.type.struct, count: this.value(`load i64, ptr ${incoming}`), properties, mutable: param.mutable }, this.fn.location);
+        }
         else {
           const slot = param.type.kind === 'decimal' ? this.owned('Dc34') : this.allocate(param.type.llvm);
           if (param.type.kind === 'decimal') this.copyDecimal(incoming, slot, this.fn.location);
           else this.instruction(`store ${param.type.llvm} ${incoming}, ptr ${slot}`);
           const kind = param.type.kind === 'buffer' ? 'buffer' : param.type.kind === 'resource' ? 'resource' : 'numeric';
-          this.define(param.name, { kind, type: param.type, ptr: slot, mutable: param.mutable }, this.fn.location);
+          this.define(param.name, { kind, type: param.type, ptr: slot, mutable: kind === 'numeric' ? true : param.mutable }, this.fn.location);
         }
       });
     } });
@@ -352,9 +429,14 @@ class Emitter extends ScalarEmitter {
     return `define ${this.fn ? 'void @tom_fn_' + this.fn.name : 'i32 @main'}(${params}) {\nentry:\n${this.allocations.join('\n')}\n${this.body.join('\n')}\n}\n`;
   }
 }
+Object.assign(Emitter.prototype, records.methods);
 
 function emitProgram(ast) {
-  const module = { globals: [], strings: new Map(), declarations: new Set(), requirements: new Set(), functions: new Map(), id: 0, needsInput: false };
+  const module = { globals: [], strings: new Map(), declarations: new Set(), requirements: new Set(), functions: new Map(), symbols: new Map(), types: records.resolveTypes(ast), id: 0, needsInput: false };
+  for (const type of module.types.values()) if (type.kind === 'record') module.globals.push(`${type.storage} = type { ${type.properties.map(p => p.type.storage || p.type.llvm).join(', ')} }`);
+  for (const node of [...ast.body.filter(x => ['enum', 'record', 'struct'].includes(x.kind)), ...ast.body.filter(x => x.kind === 'constant')]) {
+    const setup = new Emitter(module); setup.emit(node); module.symbols = setup.symbols;
+  }
   for (const fn of ast.body.filter(x => x.kind === 'function')) {
     if (module.functions.has(fn.name)) fail('E_DUPLICATE', `Função '${fn.name}' duplicada.`, fn.location);
     module.functions.set(fn.name, fn);
@@ -374,7 +456,7 @@ function emitProgram(ast) {
   }
   for (const fn of module.functions.values()) visit(fn);
   const functions = [...module.functions.values()].map(fn => new Emitter(module, fn).renderFunction(fn.body));
-  functions.push(new Emitter(module).renderFunction(ast.body.filter(x => x.kind !== 'function')));
+  functions.push(new Emitter(module).renderFunction(ast.body.filter(x => !['function', 'struct', 'constant', 'enum', 'record'].includes(x.kind))));
   let helpers = '';
   if (module.needsInput) helpers = integerInput.replace(/%message/g, '%valid_out')
     .replace('  ret i64 %value', '  store i1 true, ptr %valid_out\n  ret i64 %value')

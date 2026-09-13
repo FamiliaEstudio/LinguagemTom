@@ -1,4 +1,4 @@
-name: Tom 0.2
+name: Tom 0.4
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   linux:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,6 +33,26 @@ jobs:
         run: npm ci --prefix tom-lang --ignore-scripts
       - name: LLVM, CLI, decimal, editor and SDL regression tests
         run: npm --prefix tom-lang test
+      - name: C and Tom calculator benchmark correctness (O0 and O2)
+        run: npm --prefix tom-lang run benchmark:verify
+      - name: Musical demonstrations with simulated devices (O0 and O2)
+        run: node scripts/verify-multimedia.js
+      - name: State, input, JSON and replay demonstrations (O0 and O2)
+        run: node scripts/verify-state.js
+      - name: Musical Tom game, persistence and deterministic sessions
+        run: node --test --test-concurrency=1 jogos/musical-tom/tests/*.test.js
+      - name: Musical Tom desktop and standalone package
+        run: |
+          xvfb-run -a env TOM_VERIFY_AUDIO_DRIVER=dummy node jogos/musical-tom/scripts/verify-desktop.js
+          xvfb-run -a env TOM_VERIFY_AUDIO_DRIVER=dummy node jogos/musical-tom/scripts/verify-desktop.js --package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: musical-tom-linux-x64
+          path: jogos/musical-tom/build/linux/package/musical-tom/
+      - name: State laboratory on X11 and production packages
+        run: |
+          xvfb-run -a env TOM_VERIFY_AUDIO_DRIVER=dummy node scripts/verify-state.js --desktop
+          xvfb-run -a env TOM_VERIFY_AUDIO_DRIVER=dummy node scripts/verify-state.js --package
       - name: X11 window with targeted native input
         run: xvfb-run -a node scripts/verify-desktop.js
       - name: Package Linux calculator
@@ -41,10 +61,16 @@ jobs:
         with:
           name: calculadora-linux-x64-gnu
           path: tom-lang/exemplos/build/linux-x64-gnu/calculadora/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: laboratorio-linux-x64-gnu
+          include-hidden-files: true
+          path: .tools/linux/validation-04/packages/laboratorio/
+
 
   windows:
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Install portable tools and runtime libraries
@@ -62,6 +88,52 @@ jobs:
           . ./scripts/env.ps1
           npm.cmd --prefix tom-lang test
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: C and Tom calculator benchmark correctness (O0 and O2)
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          npm.cmd --prefix tom-lang run benchmark:verify
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Musical demonstrations with simulated devices (O0 and O2)
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          node scripts/verify-multimedia.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: State, input, JSON and replay demonstrations (O0 and O2)
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          node scripts/verify-state.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Musical Tom game, persistence and deterministic sessions
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          node --test --test-concurrency=1 jogos/musical-tom/tests/*.test.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Musical Tom desktop and standalone package
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          $env:TOM_VERIFY_AUDIO_DRIVER = 'dummy'
+          node jogos/musical-tom/scripts/verify-desktop.js
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node jogos/musical-tom/scripts/verify-desktop.js --package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: musical-tom-windows-x64
+          path: jogos/musical-tom/build/windows/package/musical-tom/
+      - name: State laboratory on Win32 and production packages
+        shell: pwsh
+        run: |
+          . ./scripts/env.ps1
+          $env:TOM_VERIFY_AUDIO_DRIVER = 'dummy'
+          node scripts/verify-state.js --desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/verify-state.js --package
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Win32 window with targeted native input
         shell: pwsh
         run: |
@@ -78,3 +150,9 @@ jobs:
         with:
           name: calculadora-windows-x64-mingw
           path: tom-lang/exemplos/build/windows-x64-mingw/calculadora/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: laboratorio-windows-x64-mingw
+          include-hidden-files: true
+          path: .tools/windows/validation-04/packages/laboratorio/

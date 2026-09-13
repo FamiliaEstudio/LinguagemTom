@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { compile } = require('./core/compiler');
+const { compileResolved } = require('./core/module-loader');
 const { buildApplication } = require('./core/native-build');
 const { spawnSync } = require('node:child_process');
 
@@ -12,6 +13,7 @@ Sem opções, gera <diretorio-do-fonte>/build/<nome-do-fonte>.ll.
 --check valida sem gravar arquivos. O backend estável é LLVM.
 --build verifica e compila uma aplicação em build/<plataforma-arquitetura-abi>/<nome>/.
 --run compila e executa a aplicação. --out-dir altera a pasta build.
+--assets DIRETORIO copia fontes e WAV para assets/ ao lado da aplicação.
 GPU, MLIR, Comptime JavaScript e garantias de ciclos são experimentais.
 `;
 
@@ -24,10 +26,10 @@ function parseArgs(argv) {
     if (arg === '--build') { options.build = true; continue; }
     if (arg === '--run') { options.build = true; options.run = true; continue; }
     if (arg === '--emit-mlir') { options.target = 'mlir'; continue; }
-    if (arg === '--out-dir' || arg === '-o') {
+    if (arg === '--out-dir' || arg === '-o' || arg === '--assets') {
       const value = argv[++i];
       if (!value || value.startsWith('-')) throw new Error(`Falta valor para ${arg}.`);
-      const key = arg === '-o' ? 'output' : 'outDir';
+      const key = arg === '-o' ? 'output' : arg === '--assets' ? 'assets' : 'outDir';
       if (options[key]) throw new Error(`Opção repetida: ${arg}.`);
       options[key] = value;
       continue;
@@ -39,6 +41,7 @@ function parseArgs(argv) {
   if (!options.file) throw new Error('Falta o arquivo .tom.');
   if (options.output && options.outDir) throw new Error('Use -o ou --out-dir, não ambos.');
   if (options.build && (options.output || options.check)) throw new Error('--build/--run não podem ser combinados com -o ou --check.');
+  if (options.assets && !options.build) throw new Error('--assets exige --build ou --run.');
   return options;
 }
 
@@ -55,14 +58,14 @@ function run(argv) {
       process.stderr.write(`${file}:1:1: error E_ENCODING: O fonte não é UTF-8 válido.\n`);
       return 1;
     }
-    const result = compile(source, { file, target: options.target });
+    const result = compileResolved(source, { file, target: options.target });
     if (!result.success) {
       for (const d of result.diagnostics) process.stderr.write(`${d.file}:${d.line}:${d.column}: ${d.severity} ${d.code}: ${d.message}\n`);
       return 1;
     }
     if (options.check) { process.stdout.write(`Validação concluída: ${options.file}\n`); return 0; }
     if (options.build) {
-      const executable = buildApplication(result, file, options.outDir);
+      const executable = buildApplication(result, file, options.outDir, { assets: options.assets });
       process.stdout.write(`Compilação concluída: ${executable}\n`);
       if (!options.run) return 0;
       const child = spawnSync(executable, [], { stdio: 'inherit' });

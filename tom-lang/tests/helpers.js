@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { compile } = require('../core/compiler');
-const { linkArguments, copyAssets } = require('../core/native-build');
+const { linkArguments, copyAssets, copyProjectAssets } = require('../core/native-build');
 
 function success(source, options) {
   const result = compile(source, options);
@@ -29,12 +29,12 @@ function command(bin, args, options = {}) {
   return result;
 }
 
-function execute(source, { input = '', optimize = '-O0', file = 'case.tom', environment = {}, events, snapshot, maximumLiveObjects = 0 } = {}) {
+function execute(source, { input = '', optimize = '-O0', file = 'case.tom', modules = {}, assets, environment = {}, events, snapshot, maximumLiveObjects = 0, nativeSources = [], linkFlags = [] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tom-test-'));
   try {
     const ir = path.join(dir, 'case.ll');
     const binary = path.join(dir, process.platform === 'win32' ? 'case.exe' : 'case');
-    const compilation = compile(source, { file });
+    const compilation = compile(source, { file, modules });
     assert.equal(compilation.success, true, JSON.stringify(compilation.diagnostics));
     const hasRuntime = compilation.artifacts.runtimeRequirements.length > 0;
     fs.writeFileSync(ir, hasRuntime ? compilation.artifacts.llvm.replace('define i32 @main()', 'define i32 @tom_program_main()') : compilation.artifacts.llvm);
@@ -45,10 +45,12 @@ function execute(source, { input = '', optimize = '-O0', file = 'case.tom', envi
       fs.writeFileSync(harness, `#include <stdint.h>\n#include <stdio.h>\nextern int tom_program_main(void);\nextern int64_t tom_live_objects(void);\nextern int64_t tom_peak_objects(void);\nint main(void) { int status = tom_program_main(); if (tom_live_objects()) { puts("TOM_RESOURCE_LEAK"); return 91; } if (${maximumLiveObjects} && tom_peak_objects() > ${maximumLiveObjects}) { puts("TOM_RESOURCE_ACCUMULATION"); return 92; } return status; }\n`);
       libs.push(harness);
     }
-    command(process.env.CLANG || 'clang', [optimize, ir, '-o', binary, ...libs]);
-    copyAssets(dir, compilation.artifacts.runtimeRequirements);
+    command(process.env.CLANG || 'clang', [optimize, ir, '-o', binary, ...libs, ...nativeSources, ...linkFlags]);
+    copyAssets(dir, compilation.artifacts.runtimeRequirements, compilation.artifacts.assetRequirements);
+    if (assets) copyProjectAssets(assets,path.join(dir,'assets'));
     const env = { ...process.env, ...environment };
     if (events !== undefined) {
+      if (!env.TOM_DATA_DIRECTORY) env.TOM_DATA_DIRECTORY = path.join(dir, 'user-data');
       env.TOM_UI_EVENTS = path.join(dir, 'events.txt'); env.TOM_UI_TRACE = path.join(dir, 'trace.txt');
       fs.writeFileSync(env.TOM_UI_EVENTS, events);
       if (snapshot) env.TOM_UI_SNAPSHOT = snapshot;

@@ -1,7 +1,7 @@
 {
   "name": "tom-lang",
   "displayName": "Linguagem Tom",
-  "version": "0.2.1",
+  "version": "0.4.0",
   "engines": {
     "vscode": "^1.70.0",
     "node": ">=24 <25"
@@ -42,7 +42,7 @@
   "activationEvents": [
     "onLanguage:tom"
   ],
-  "description": "Tom 0.2: funções CPU, exceções, UTF-8, decimal128 e aplicativos SDL3.",
+  "description": "Tom 0.4: registros, enumerações, ações de entrada, JSON, interface e sessões reproduzíveis.",
   "scripts": {
     "test": "node --test tests/*.test.js",
     "test:unit": "node --test tests/compiler.test.js tests/editor.test.js tests/highlighting.test.js",
@@ -52,7 +52,15 @@
     "test:desktop": "node ../scripts/verify-desktop.js",
     "build:grammar": "node editor/grammar.js",
     "test:editor": "node --test tests/editor.test.js tests/highlighting.test.js",
-    "package:extension": "node ../scripts/package-extension.js"
+    "package:extension": "node ../scripts/package-extension.js",
+    "benchmark": "node ../benchmarks/calculator/run.js",
+    "benchmark:verify": "node --test ../benchmarks/calculator/runner.test.js && node ../benchmarks/calculator/run.js --verify",
+    "calculator:c": "node ../benchmarks/calculator/run.js --run-c",
+    "test:multimedia": "node ../scripts/verify-multimedia.js",
+    "test:audio-device": "node ../scripts/verify-audio-device.js",
+    "test:state": "node ../scripts/verify-state.js",
+    "musical": "node tomc.js --run --assets ../jogos/musical-tom/assets ../jogos/musical-tom/src/musical-tom.tom",
+    "test:musical": "node --test --test-concurrency=1 ../jogos/musical-tom/tests/*.test.js"
   },
   "devDependencies": {
     "@vscode/vsce": "3.9.2",
