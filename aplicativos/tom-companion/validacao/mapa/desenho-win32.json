@@ -1,0 +1,37 @@
+{
+  "date": "2026-09-13T23:52:07.649Z",
+  "platform": "win32",
+  "release": "10.0.26200",
+  "cpu": "Intel(R) Core(TM) i5-14400F",
+  "logicalCores": 16,
+  "memoryBytes": 34164097024,
+  "node": "v24.21.0",
+  "renderer": "SDL software / dummy, sem capturas por quadro",
+  "instructions": 10000,
+  "analysisMs": [
+    326.0965,
+    301.2755000000001,
+    338.4521000000001,
+    214.43899999999996,
+    319.095,
+    282.83580000000006
+  ],
+  "render": [
+    {
+      "optimize": "-O0",
+      "frames": 60,
+      "nodes": 512,
+      "edges": 2048,
+      "seconds": 0.1193647,
+      "fps": 502.6611720215441
+    },
+    {
+      "optimize": "-O2",
+      "frames": 60,
+      "nodes": 512,
+      "edges": 2048,
+      "seconds": 0.1168221,
+      "fps": 513.601450410496
+    }
+  ]
+}

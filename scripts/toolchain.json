@@ -85,5 +85,49 @@
     "url": "https://raw.githubusercontent.com/steinbergmedia/bravura/bravura-1.482/LICENSE.txt",
     "file": "Bravura.LICENSE",
     "sha256": "bdca252186865f3b2c0e76da4a4e335c14ba1d37f80194fca254ddfa88e84fbf"
+  },
+  "dejavuMono": {
+    "version": "2.37",
+    "origin": "Debian/Ubuntu fonts-dejavu-core 2.37-8build1",
+    "url": "https://dejavu-fonts.github.io/",
+    "file": "DejaVuSansMono.ttf",
+    "sha256": "a54dca07c76d6289e717e75e0a58c0128f6d7269ef3faf76417c9d7d3bba37ab"
+  },
+  "dejavuMonoLicense": {
+    "version": "2.37",
+    "origin": "Debian/Ubuntu fonts-dejavu-core 2.37-8build1",
+    "url": "https://dejavu-fonts.github.io/",
+    "file": "DejaVuSansMono.LICENSE",
+    "sha256": "63d3ba759d12804c5b31a9d5940d855c1820d1f5999e6b0872eb1c7ff045fbc9"
+  },
+  "sqlite": {
+    "url": "https://www.sqlite.org/2026/sqlite-amalgamation-3530400.zip",
+    "file": "sqlite-amalgamation-3530400.zip",
+    "sha256": "1e71ddf93849c6a6ecf58b827c0692073d2dd7ee40196158068f7b29f422e87d",
+    "sha3_256": "628a44cfe82c66aed1ccbbe85a562d2e33ebe64b3288981ed76285612227934e"
+  },
+  "utf8proc": {
+    "version": "2.11.3",
+    "url": "https://github.com/JuliaStrings/utf8proc/releases/download/v2.11.3/utf8proc-2.11.3.tar.gz",
+    "file": "utf8proc-2.11.3.tar.gz",
+    "sha256": "415189fd2c85cd6ee5ff26af500fa387de9ada1e3e316e93f7338551481d557d"
+  },
+  "graphemeTests": {
+    "version": "17.0.0",
+    "url": "https://www.unicode.org/Public/17.0.0/ucd/auxiliary/GraphemeBreakTest.txt",
+    "file": "GraphemeBreakTest-17.0.0.txt",
+    "sha256": "e2d134d2c52919bace503ebb6a551c1855fe1a1faec18478c78fff254a1793ec"
+  },
+  "miniz": {
+    "version": "3.1.2",
+    "url": "https://codeload.github.com/richgel999/miniz/tar.gz/refs/tags/3.1.2",
+    "file": "miniz-3.1.2.tar.gz",
+    "sha256": "98468f8924934b723276680f85238b6c78bf1f8b49b4459cc9b7214a20e2e9fb"
+  },
+  "libxml2": {
+    "version": "2.15.4",
+    "url": "https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.4.tar.xz",
+    "file": "libxml2-2.15.4.tar.xz",
+    "sha256": "98087fd181d9070724f3fbc65c7377db03038eb92bd882374daff44940138821"
   }
 }

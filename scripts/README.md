@@ -1,5 +1,11 @@
 # Ferramentas locais Tom 0.4
 
+O [Tom Companion](../aplicativos/tom-companion/README.md) usa estas mesmas
+ferramentas. Depois de prepará-las, execute
+`node aplicativos/tom-companion/scripts/build.js` e instale a extensão atualizada.
+O Companion não acrescenta dependências. Seu pacote também inclui este instalador
+em `support/scripts/`; ele cria `support/.tools/` para uso fora do repositório.
+
 Execute na raiz do repositório. Os instaladores mantêm ferramentas, downloads e
 bibliotecas em `.tools/`, ignorada pelo Git. Não alteram PATH global, registro,
 serviços ou instalações existentes. `env.sh`/`env.ps1` afetam somente o terminal.
@@ -69,6 +75,7 @@ usam pastas separadas e podem coexistir no mesmo checkout.
 - SDL3 3.4.16 e SDL_ttf 3.2.2;
 - libmpdec 4.0.1, compilada localmente em C portátil para cada ABI.
 - yyjson 0.12.0, biblioteca C estática com licença MIT;
+- SQLite 3.53.4, biblioteca estática de domínio público com FTS5, verificada por SHA-256;
 - Bravura 1.482 e sua licença, versionadas em `tom-lang/runtime/stable/assets/tom/`.
 
 SDL Linux usa X11 e renderização por software. A construção SDL_ttf usa FreeType
@@ -158,3 +165,24 @@ preferências nessa pasta; o executável de produção usa o diretório SDL norm
 Veja [contrato](../tom-lang/docs/state-0.4.md),
 [demonstrações](../tom-lang/exemplos/estado/README.md) e
 [resultados](../tom-lang/docs/validation-0.4.md).
+
+## Mapa do código
+
+O build do Companion inclui a demonstração nativa do mapa. Após gerar e instalar
+o VSIX, use **Tom: Abrir mapa do código no Companion**. As instruções estão em
+[MAPA.md](../aplicativos/tom-companion/MAPA.md); o contrato das APIs e o benchmark
+reproduzível estão em [code-map.md](../tom-lang/docs/code-map.md).
+
+`verify-map-desktop.js` verifica a janela real e aceita `--package`;
+`benchmark-map.js` registra hardware, tempos de análise e desenho por software.
+Ambos ficam em `aplicativos/tom-companion/scripts/`.
+
+### Validação do editor Scriptorium
+
+`node scripts/verify-editor.js --desktop` gera pacotes `-O0`/`-O2`, valida salvar/formatar/interromper/recuperar/cancelar/descartar e abre os pacotes em uma janela nativa com PATH sem ferramentas. `node scripts/verify-editor-clipboard.js` testa duas instâncias e a troca textual com xclip (Linux) ou PowerShell (Windows). Em Linux sem desktop, use `xvfb-run -a`. Artefatos ficam em `.tools/<plataforma>/validation-editor/`. `build-utf8proc.js` compila a dependência Unicode fixada; `setup-native.js` baixa e verifica também os testes oficiais e habilita HarfBuzz em SDL_ttf Linux.
+
+## Scriptorium
+
+O aplicativo em Tom fica em `aplicativos/scriptorium/`. `setup-native.js` também prepara miniz 3.1.2 e libxml2 2.15.4, com hashes e licenças fixados. Para acrescentá-los a uma toolchain existente, execute `node scripts/build-docx.js`.
+
+`npm --prefix tom-lang run package:scriptorium` gera o pacote da plataforma em `.tools/<plataforma>/scriptorium/packages/O2/scriptorium/`, com dependências, documentação, logo e manifesto SHA-256. O ZIP Windows inclui `Instalar-Scriptorium.exe`, que instala sem administrador e cria o atalho da área de trabalho com o logo; o atalho usa `Abrir-Scriptorium.exe` para trazer uma janela existente à frente. `test:scriptorium-app` valida domínio e runtime; `verify:scriptorium-app` executa a interface simulada; `node aplicativos/scriptorium/scripts/verify-desktop.js` valida o pacote em desktop nativo. Consulte [uso e contratos](../aplicativos/scriptorium/README.md).

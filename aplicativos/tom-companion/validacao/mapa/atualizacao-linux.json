@@ -1,0 +1,45 @@
+{
+  "date": "2026-09-14T00:18:38.245Z",
+  "platform": "linux",
+  "release": "6.18.33.2-microsoft-standard-WSL2",
+  "cpu": "Intel(R) Core(TM) i5-14400F",
+  "node": "v24.21.0",
+  "instructions": 10000,
+  "nodes": 101,
+  "edges": 100,
+  "debounceMs": 400,
+  "editToPublicationMs": [
+    780.385753,
+    723.2325489999998,
+    737.9623710000001,
+    720.019538,
+    688.7291410000003
+  ],
+  "phases": [
+    {
+      "sourceReadyMs": 401.497245,
+      "analysisReceivedMs": 694.384532,
+      "commitSentMs": 749.3417120000001
+    },
+    {
+      "sourceReadyMs": 401.2723699999999,
+      "analysisReceivedMs": 627.981401,
+      "commitSentMs": 691.8767830000002
+    },
+    {
+      "sourceReadyMs": 401.2458999999999,
+      "analysisReceivedMs": 639.886019,
+      "commitSentMs": 706.9773230000001
+    },
+    {
+      "sourceReadyMs": 401.2457239999999,
+      "analysisReceivedMs": 632.1479979999999,
+      "commitSentMs": 689.859782
+    },
+    {
+      "sourceReadyMs": 401.2080460000002,
+      "analysisReceivedMs": 601.6914609999999,
+      "commitSentMs": 658.1078460000003
+    }
+  ]
+}

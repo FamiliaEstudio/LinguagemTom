@@ -1,4 +1,10 @@
-# Runtime estável Tom 0.3
+# Runtime estável Tom
+
+A [fundação do Scriptorium](../../docs/texto-sqlite.md) acrescenta `Texto`
+redimensionável e `tom_sqlite`, com SQLite 3.53.4/FTS5 estático. `TomText.limit=0`
+identifica buffers fixos; um limite positivo permite crescimento. `TomTextView`
+mantém vistas emprestadas válidas após realocação. Recompile as bibliotecas C e
+os módulos Tom ao atualizar esta ABI.
 
 ABI C em [tom_runtime.h](tom_runtime.h), dividida em `tom_text`, `tom_decimal`,
 `tom_ui`, `tom_platform`, `tom_math` e `tom_audio`. As operações devolvem código `int32_t`; resultados usam o último
@@ -121,3 +127,11 @@ Ações, componentes, configuração, sessão e replay são bibliotecas `.tom`, 
 comportamentos específicos no runtime. Consulte o [contrato 0.4](../../docs/state-0.4.md).
 Injeção de eventos, relógios, diretório de dados e traces é compilada somente com
 `TOM_UI_TEST`; builds públicos ignoram essas variáveis.
+
+### Editor de documentos
+
+`document.c` usa Texto, utf8proc 2.11.3/Unicode 17 e yyjson sem SDL; `editor.c` utiliza o modelo e SDL_ttf/HarfBuzz; `editor_sqlite.c` mantém um trabalhador SDL e conexão SQLite exclusivos. As bibliotecas CMake são `tom_document`, `tom_editor` e `tom_editor_sqlite`. `document.h` e `ui_internal.h` são interfaces internas; a interface pública permanece em `tom_runtime.h`. Consulte [contratos e representação persistente](../../docs/editor-texto.md).
+
+## Arquivos, DOCX e formulários
+
+`files.c`, `docx.c`, `file_jobs.c`, `file_dialog.c` e `form.c` implementam operações reutilizáveis de arquivo, conversão DOCX, trabalhos assíncronos, seleção de caminhos e formulários. `editor_sqlite.c` captura contexto JSON junto ao documento. Contratos e limites estão em [arquivos-docx.md](../../docs/arquivos-docx.md); testes adicionais ficam em `aplicativos/scriptorium/tests/` na raiz. Os builds diretos e CMake incluem miniz/libxml2 estáticos, com versões fixadas na toolchain.

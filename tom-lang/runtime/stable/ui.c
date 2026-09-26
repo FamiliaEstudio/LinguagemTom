@@ -9,9 +9,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
-struct TomWindow { SDL_Window *window; SDL_Renderer *renderer; int extended, pointer_events, references, closed; uint32_t buttons; Uint8 held[SDL_SCANCODE_COUNT]; struct TomWindow *next; };
-struct TomFont { TTF_Font *font; };
-struct TomEvent { int32_t kind, x, y, button, key, width, height, window_id, repeat, scancode, modifiers, buttons; int64_t timestamp; char text[256]; };
+#include "ui_internal.h"
 struct TomVisual { SDL_Texture *texture; TomWindow *owner; int width, height, origin_x, baseline, advance; };
 static int initialized, objects;
 static SDL_ThreadID main_thread;
@@ -51,9 +49,12 @@ static void window_release(TomWindow *value) {
     SDL_DestroyRenderer(value->renderer); SDL_DestroyWindow(value->window); free(value); released();
   }
 }
+int tom_ui_on_main(void) { return on_main(); }
+void tom_ui_window_retain(TomWindow *value) { value->references++; }
+void tom_ui_window_release(TomWindow *value) { window_release(value); }
 void tom_window_free(TomWindow *value) { if (value) { value->closed = 1; window_release(value); } }
 void tom_font_free(TomFont *value) { if (value) { TTF_CloseFont(value->font); free(value); released(); } }
-void tom_event_free(TomEvent *value) { if (value) { free(value); released(); } }
+void tom_event_free(TomEvent *value) { if (value) { tom_text_free(value->dynamic_text); free(value); released(); } }
 int32_t tom_window_new(const char *title, int32_t width, int32_t height, TomWindow **out) {
   if (!out || !tom_utf8_valid(title) || width < 1 || height < 1 || width > 16384 || height > 16384) return TOM_INVALID;
   int32_t error = initialize(); if (error) return error;
@@ -105,13 +106,28 @@ static int32_t coordinates(TomWindow *window, float x, float y, TomEvent *out) {
   if (!SDL_RenderCoordinatesFromWindow(window->renderer, x, y, &logical_x, &logical_y)) return TOM_RESOURCE;
   if (!isfinite(logical_x) || !isfinite(logical_y) || logical_x < -2147483648.0f || logical_x >= 2147483648.0f || logical_y < -2147483648.0f || logical_y >= 2147483648.0f) return TOM_BOUNDS;
   out->x = (int32_t)floorf(logical_x); out->y = (int32_t)floorf(logical_y);
+  out->precise_x = logical_x; out->precise_y = logical_y;
 #ifdef TOM_UI_TEST
   if(trace && getenv("TOM_UI_TRACE_INPUT"))fprintf(trace,"POINTER %d %d %d %d\n",out->kind,out->x,out->y,out->button);
 #endif
   return TOM_OK;
 }
+static void event_clear(TomEvent *out) {
+  TomText *text=out->dynamic_text;memset(out,0,sizeof(*out));out->dynamic_text=text;
+  if(text){text->length=0;text->data[0]=0;}
+}
+const char *tom_ui_event_text(const TomEvent *event) { return event->dynamic_text&&event->dynamic_text->length?event->dynamic_text->data:event->text; }
+static int32_t event_set_text(TomWindow *window,TomEvent *out,const char *text) {
+  if(!tom_utf8_valid(text))return TOM_INVALID;
+  if(window&&window->editor_count){
+    if(!out->dynamic_text){int32_t e=tom_text_dynamic_new("",67108864,&out->dynamic_text);if(e)return e;}
+    return tom_text_set(out->dynamic_text,text);
+  }
+  if(strlen(text)>=sizeof(out->text))return TOM_CAPACITY;
+  strcpy(out->text,text);return TOM_OK;
+}
 static int32_t translate(TomWindow *window, SDL_Event *event, TomEvent *out) {
-  memset(out, 0, sizeof(*out));
+  event_clear(out);
   SDL_Window *native = SDL_GetWindowFromEvent(event);
   TomWindow *target = windows;
   while (target && target->window != native) target = target->next;
@@ -130,11 +146,14 @@ static int32_t translate(TomWindow *window, SDL_Event *event, TomEvent *out) {
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED: out->kind = 1; out->window_id = (int32_t)event->window.windowID; break;
     case SDL_EVENT_TEXT_INPUT:
       out->kind = 2; out->window_id = (int32_t)event->text.windowID;
-      if (!tom_utf8_valid(event->text.text)) return TOM_INVALID;
-      if (strlen(event->text.text) >= sizeof(out->text)) return TOM_CAPACITY;
-      strcpy(out->text, event->text.text); break;
+      return event_set_text(target,out,event->text.text);
+    case SDL_EVENT_TEXT_EDITING:
+      if(!target||!target->editor_count)break;
+      out->kind=13;out->window_id=(int32_t)event->edit.windowID;
+      out->composition_start=event->edit.start;out->composition_length=event->edit.length;
+      return event_set_text(target,out,event->edit.text);
     case SDL_EVENT_KEY_DOWN: case SDL_EVENT_KEY_UP:
-      out->kind = event->type == SDL_EVENT_KEY_DOWN ? 3 : target && target->extended ? 7 : 0;
+      out->kind = event->type == SDL_EVENT_KEY_DOWN ? 3 : target && (target->extended||target->editor_count) ? 7 : 0;
       out->key = event->key.key == SDLK_KP_ENTER ? 13 : (int32_t)event->key.key;
       out->repeat = event->key.repeat ? 1 : 0; out->window_id = (int32_t)event->key.windowID;
       out->scancode = (int32_t)event->key.scancode; out->modifiers = (int32_t)event->key.mod;
@@ -144,20 +163,27 @@ static int32_t translate(TomWindow *window, SDL_Event *event, TomEvent *out) {
     case SDL_EVENT_WINDOW_FOCUS_LOST: case SDL_EVENT_WINDOW_FOCUS_GAINED:
       out->window_id = (int32_t)event->window.windowID;
       if (target && event->type == SDL_EVENT_WINDOW_FOCUS_LOST) { memset(target->held, 0, sizeof(target->held)); target->buttons=0; }
-      out->kind = target && (target->extended || target->pointer_events) ? (event->type == SDL_EVENT_WINDOW_FOCUS_LOST ? 8 : 9) : 0; break;
+      out->kind = target && (target->extended || target->pointer_events || target->editor_count) ? (event->type == SDL_EVENT_WINDOW_FOCUS_LOST ? 8 : 9) : 0; break;
     case SDL_EVENT_MOUSE_BUTTON_DOWN: case SDL_EVENT_MOUSE_BUTTON_UP:
-      out->kind = event->type==SDL_EVENT_MOUSE_BUTTON_DOWN ? 4 : target && target->pointer_events ? 11 : 0;
-      out->button = event->button.button; out->window_id = target ? (int32_t)SDL_GetWindowID(target->window) : (int32_t)event->button.windowID;
+      out->kind = event->type==SDL_EVENT_MOUSE_BUTTON_DOWN ? 4 : target && (target->pointer_events||target->editor_count) ? 11 : 0;
+      out->clicks=event->button.clicks; out->button = event->button.button; out->window_id = target ? (int32_t)SDL_GetWindowID(target->window) : (int32_t)event->button.windowID;
       if(target && event->button.button>=1 && event->button.button<=31) {
         uint32_t mask=UINT32_C(1)<<(event->button.button-1);
         if(event->button.down)target->buttons|=mask;else target->buttons&=~mask;out->buttons=(int32_t)target->buttons;
       }
       return coordinates(target ? target : window, event->button.x, event->button.y, out);
     case SDL_EVENT_MOUSE_MOTION:
-      if(!target || !target->pointer_events)break;
+      if(!target || !(target->pointer_events||target->editor_count))break;
       target->buttons=event->motion.state;out->buttons=(int32_t)target->buttons;
       out->kind=10;out->window_id=(int32_t)event->motion.windowID;
       return coordinates(target,event->motion.x,event->motion.y,out);
+    case SDL_EVENT_MOUSE_WHEEL:
+      if (!target || !(target->wheel_events||target->editor_count)) break;
+      if (!isfinite(event->wheel.x) || !isfinite(event->wheel.y)) return TOM_INVALID;
+      out->kind=12; out->window_id=(int32_t)event->wheel.windowID;
+      out->wheel_x=event->wheel.x; out->wheel_y=event->wheel.y;
+      if(event->wheel.direction==SDL_MOUSEWHEEL_FLIPPED){out->wheel_x=-out->wheel_x;out->wheel_y=-out->wheel_y;}
+      return coordinates(target,event->wheel.mouse_x,event->wheel.mouse_y,out);
     case SDL_EVENT_WINDOW_RESIZED: case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
       out->kind = 5; out->width = event->window.data1; out->height = event->window.data2; out->window_id = (int32_t)event->window.windowID; break;
     case SDL_EVENT_WINDOW_EXPOSED: out->kind = 6; out->window_id = (int32_t)event->window.windowID; break;
@@ -167,33 +193,46 @@ static int32_t translate(TomWindow *window, SDL_Event *event, TomEvent *out) {
 }
 #ifdef TOM_UI_TEST
 static int32_t scripted_event(TomWindow *window, TomEvent *out) {
-  char line[1024]; memset(out, 0, sizeof(*out));
+  char line[1024]; event_clear(out);
+  float px,py,wx,wy;int flipped;
   int32_t error=tom_time_now(&out->timestamp);if(error)return error;
   if (!events || !fgets(line, sizeof(line), events)) { out->kind = 1; return TOM_OK; }
   line[strcspn(line, "\r\n")] = 0;
   if (!strncmp(line, "text ", 5)) {
-    if (strlen(line + 5) >= sizeof(out->text) || !tom_utf8_valid(line + 5)) return TOM_INVALID;
-    out->kind = 2; strcpy(out->text, line + 5);
-  } else if (sscanf(line,"down %d %d %d",&out->key,&out->scancode,&out->repeat)==3) {
+    out->kind=2;return event_set_text(window,out,line+5);
+  } else if(!strncmp(line,"composition ",12)) {
+    int offset=0;if(sscanf(line+12,"%d %d %n",&out->composition_start,&out->composition_length,&offset)!=2)return TOM_INVALID;
+    out->kind=window->editor_count?13:0;return event_set_text(window,out,line+12+offset);
+  } else if(sscanf(line,"keydown %d %d",&out->key,&out->modifiers)==2) {out->kind=3;
+  } else if (sscanf(line,"down %d %d %d %d",&out->key,&out->scancode,&out->repeat,&out->modifiers)>=3) {
     out->kind=3;if(out->scancode>0 && out->scancode<SDL_SCANCODE_COUNT)window->held[out->scancode]=1;
   } else if(sscanf(line,"up %d %d",&out->key,&out->scancode)==2) {
-    out->kind=window->extended?7:0;if(out->scancode>0 && out->scancode<SDL_SCANCODE_COUNT)window->held[out->scancode]=0;
+    out->kind=(window->extended||window->editor_count)?7:0;if(out->scancode>0 && out->scancode<SDL_SCANCODE_COUNT)window->held[out->scancode]=0;
   } else if(!strcmp(line,"focuslost")) {
-    out->kind=window->extended||window->pointer_events?8:0;memset(window->held,0,sizeof(window->held));window->buttons=0;
-  } else if(!strcmp(line,"focusgain"))out->kind=window->extended||window->pointer_events?9:0;
-  else if(sscanf(line,"motion %d %d",&out->x,&out->y)==2) {
-    out->kind=window->pointer_events?10:0;out->buttons=(int32_t)window->buttons;
-    return coordinates(window,(float)out->x,(float)out->y,out);
+    out->kind=window->extended||(window->pointer_events||window->editor_count)?8:0;memset(window->held,0,sizeof(window->held));window->buttons=0;
+  } else if(!strcmp(line,"focusgain"))out->kind=window->extended||(window->pointer_events||window->editor_count)?9:0;
+  else if(sscanf(line,"wheel %f %f %f %f %d",&px,&py,&wx,&wy,&flipped)==5) {
+    if(!isfinite(wx)||!isfinite(wy)||(flipped!=0&&flipped!=1))return TOM_INVALID;
+    out->kind=(window->wheel_events||window->editor_count)?12:0;out->wheel_x=flipped?-wx:wx;out->wheel_y=flipped?-wy:wy;
+    return coordinates(window,px,py,out);
+  } else if(sscanf(line,"motion %f %f",&px,&py)==2) {
+    out->kind=(window->pointer_events||window->editor_count)?10:0;out->buttons=(int32_t)window->buttons;
+    return coordinates(window,px,py,out);
   } else if(sscanf(line,"release %d %d",&out->x,&out->y)==2) {
-    out->kind=window->pointer_events?11:0;out->button=1;window->buttons=0;
+    out->kind=(window->pointer_events||window->editor_count)?11:0;out->button=1;window->buttons=0;
     return coordinates(window,(float)out->x,(float)out->y,out);
   } else if (sscanf(line, "key %d", &out->key) == 1) out->kind = 3;
   else if (sscanf(line, "mouse %d %d", &out->x, &out->y) == 2) {
-    out->kind = 4; out->button = 1; window->buttons=1;out->buttons=1; return coordinates(window, (float)out->x, (float)out->y, out);
+    out->kind = 4; out->button = 1;
+    sscanf(line, "mouse %d %d %d", &out->x, &out->y, &out->button);
+    if (out->button < 1 || out->button > 31) return TOM_INVALID;
+    window->buttons=1u<<(out->button-1);out->buttons=(int32_t)window->buttons;
+    return coordinates(window, (float)out->x, (float)out->y, out);
   } else if (sscanf(line, "resize %d %d", &out->width, &out->height) == 2) {
     out->kind = 5; if (!SDL_SetWindowSize(window->window, out->width, out->height)) return TOM_RESOURCE;
     SDL_PumpEvents();
   } else if (!strcmp(line, "quit")) out->kind = 1;
+  else if (!strcmp(line, "expose")) out->kind = 6;
   else if (!strncmp(line, "wait ", 5)) { SDL_Delay((Uint32)strtoul(line + 5, NULL, 10)); out->kind = 6; }
   else return TOM_INVALID;
   return TOM_OK;
@@ -212,7 +251,7 @@ int32_t tom_event_poll(TomWindow *window, TomEvent *out, int32_t *available) {
   if (!window || window->closed || !out || !available || !on_main()) return TOM_RESOURCE;
   SDL_Event event; *available = 0;
   while (SDL_PollEvent(&event)) { int32_t error = translate(window, &event, out); if (error) return error; if (out->kind) { *available = 1; return TOM_OK; } }
-  memset(out, 0, sizeof(*out)); return TOM_OK;
+  event_clear(out); return TOM_OK;
 }
 int32_t tom_event_field(const TomEvent *event, int32_t field, int32_t *out) {
   if (!event || !out) return TOM_INVALID;
@@ -222,11 +261,17 @@ int32_t tom_event_field(const TomEvent *event, int32_t field, int32_t *out) {
     case 6: *out = event->height; break; case 7: *out = event->window_id; break; case 8: *out = event->repeat; break;
     case 9: *out = event->scancode; break; case 10: *out = event->modifiers; break;
     case 11: *out = event->buttons; break;
+    case 14: *out=event->clicks;break;case 15:*out=event->composition_start;break;case 16:*out=event->composition_length;break;
     default: return TOM_BOUNDS;
   }
   return TOM_OK;
 }
-int32_t tom_event_text(const TomEvent *event, TomText *out) { return event ? tom_text_set(out, event->text) : TOM_INVALID; }
+int32_t tom_event_text(const TomEvent *event, TomText *out) { return event ? tom_text_set(out, tom_ui_event_text(event)) : TOM_INVALID; }
+int32_t tom_event_field_f64(const TomEvent *event, int32_t field, double *out) {
+  if(!event||!out)return TOM_INVALID;
+  switch(field){case 1:*out=event->precise_x;break;case 2:*out=event->precise_y;break;case 12:*out=event->wheel_x;break;case 13:*out=event->wheel_y;break;default:return TOM_BOUNDS;}
+  return TOM_OK;
+}
 int32_t tom_event_time(const TomEvent *event, int64_t *out) { if (!event || !out) return TOM_INVALID; *out = event->timestamp; return TOM_OK; }
 int32_t tom_window_events(TomWindow *window, int32_t extended) {
   if (!window || window->closed || !on_main()) return TOM_RESOURCE;
@@ -237,6 +282,10 @@ int32_t tom_window_pointer_events(TomWindow *window,int32_t enabled) {
   if(!window || window->closed || !on_main())return TOM_RESOURCE;
   if(enabled!=0 && enabled!=1)return TOM_INVALID;window->pointer_events=enabled;window->buttons=0;return TOM_OK;
 }
+int32_t tom_window_wheel_events(TomWindow *window,int32_t enabled) {
+  if(!window||window->closed||!on_main())return TOM_RESOURCE;
+  if(enabled!=0&&enabled!=1)return TOM_INVALID;window->wheel_events=enabled;return TOM_OK;
+}
 int32_t tom_key_held(TomWindow *window, int32_t scancode, int32_t *out) {
   if (!window || window->closed || !on_main()) return TOM_RESOURCE;
   if (!out || scancode <= 0 || scancode >= SDL_SCANCODE_COUNT) return TOM_INVALID;
@@ -245,7 +294,7 @@ int32_t tom_key_held(TomWindow *window, int32_t scancode, int32_t *out) {
 int32_t tom_event_until(TomWindow *window, TomEvent *out, int64_t deadline, int32_t *available) {
   if (!window || window->closed || !out || !available || !on_main()) return TOM_RESOURCE;
   if (deadline < 0) return TOM_INVALID;
-  *available = 0; memset(out, 0, sizeof(*out));
+  *available = 0; event_clear(out);
   for (;;) {
     int64_t now; int32_t error = tom_time_now(&now); if (error) return error;
     int64_t remaining = deadline > now ? deadline - now : 0;
@@ -267,7 +316,7 @@ int32_t tom_event_until(TomWindow *window, TomEvent *out, int64_t deadline, int3
     }
     error = translate(window, &event, out); if (error) return error;
     if (out->kind) { *available = 1; return TOM_OK; }
-    memset(out, 0, sizeof(*out));
+    event_clear(out);
     if (!remaining) return TOM_OK;
   }
 }
@@ -486,4 +535,25 @@ int32_t tom_visual_catalog_draw(TomWindow *window,TomVisualCatalog *catalog,int6
 int32_t tom_visual_catalog_transform(TomWindow *window,TomVisualCatalog *catalog,int64_t id,double x,double y,double sx,double sy,double angle,uint32_t rgba) {
   if(!catalog || catalog->owner!=window)return TOM_RESOURCE;TomCatalogEntry *entry=tom_catalog_find(&catalog->slots,id);
   return entry?tom_draw_visual_transform(window,entry->value,x,y,sx,sy,angle,rgba):TOM_RESOURCE;
+}
+
+int32_t tom_clipboard_read(TomWindow *window,TomText *out) {
+  if(!window||window->closed||!out||!on_main())return TOM_RESOURCE;
+  SDL_ClearError();char *text=SDL_GetClipboardText();
+  if(!text||*SDL_GetError()){SDL_free(text);return TOM_RESOURCE;}
+  int32_t error=tom_text_set(out,text);SDL_free(text);return error;
+}
+int32_t tom_clipboard_write(TomWindow *window,const char *text) {
+  if(!window||window->closed||!on_main())return TOM_RESOURCE;
+  if(!tom_utf8_valid(text))return TOM_INVALID;
+  return SDL_SetClipboardText(text)?TOM_OK:TOM_RESOURCE;
+}
+int32_t tom_window_logical_size(TomWindow *window,int32_t width,int32_t height) {
+  if(!window||window->closed||!on_main())return TOM_RESOURCE;
+  if(width<1||height<1||width>16384||height>16384)return TOM_BOUNDS;
+  return SDL_SetRenderLogicalPresentation(window->renderer,width,height,SDL_LOGICAL_PRESENTATION_LETTERBOX)?TOM_OK:TOM_RESOURCE;
+}
+int32_t tom_window_size(TomWindow *window,int32_t field,int32_t *out) {
+  if(!window||window->closed||!out||!on_main())return TOM_RESOURCE;
+  if(field<0||field>1)return TOM_BOUNDS;int w,h;if(!SDL_GetWindowSize(window->window,&w,&h))return TOM_RESOURCE;*out=field?h:w;return TOM_OK;
 }

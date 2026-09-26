@@ -1,0 +1,37 @@
+# Saídas de compilação, instaladores e ferramentas
+/build/
+/dist/
+/.tools/
+/node_modules/
+/coverage/
+/.cache/
+*.log
+*.tmp
+*.partial
+*.zip
+*.tar.gz
+*.sha256
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+*.a
+*.pdb
+
+# Acervo pessoal e preferências locais
+/acervo/
+/backups/
+/fontes/
+/dados.sqlite*
+/configuracao.json
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db

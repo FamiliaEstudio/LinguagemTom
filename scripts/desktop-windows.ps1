@@ -1,4 +1,4 @@
-param([int]$ProcessId, [switch]$Multimedia, [string]$StateDemo, [switch]$Production, [string]$Trace)
+param([int]$ProcessId, [switch]$Multimedia, [string]$StateDemo, [switch]$Production, [string]$Trace, [string]$Ready)
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
@@ -7,6 +7,7 @@ public static class TomDesktop {
   public delegate bool Enumerator(IntPtr w, IntPtr arg);
   [DllImport("user32.dll")] public static extern bool EnumWindows(Enumerator cb, IntPtr arg);
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr w, out uint pid);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr w);
   [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr w);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr w, uint msg, IntPtr wp, IntPtr lp);
   [DllImport("user32.dll")] public static extern uint MapVirtualKey(uint code, uint kind);
@@ -14,6 +15,8 @@ public static class TomDesktop {
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr w, out Rect rect);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr w, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+  [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr w, ref Point point);
+  public struct Point { public int x, y; }
   public struct Rect { public int left, top, right, bottom; }
   public static void Click(IntPtr w, IntPtr point) {
     // Queue the whole gesture together: SDL otherwise reconciles the synthetic
@@ -24,6 +27,12 @@ public static class TomDesktop {
   public static void Drag(IntPtr w, IntPtr start, IntPtr end) {
     PostMessage(w,0x200,IntPtr.Zero,start); PostMessage(w,0x201,(IntPtr)1,start);
     PostMessage(w,0x200,(IntPtr)1,end); PostMessage(w,0x202,IntPtr.Zero,end);
+  }
+  public static void Wheel(IntPtr w, IntPtr client) {
+    Point p = new Point { x = (short)(client.ToInt64() & 65535), y = (short)((client.ToInt64() >> 16) & 65535) };
+    ClientToScreen(w, ref p);
+    PostMessage(w,0x200,IntPtr.Zero,client);
+    PostMessage(w,0x20A,(IntPtr)(120 << 16),(IntPtr)((p.x & 65535) | (p.y << 16)));
   }
   public static IntPtr Find(uint wanted) { IntPtr found = IntPtr.Zero;
     EnumWindows((w,a) => { uint pid; GetWindowThreadProcessId(w,out pid); if(pid==wanted && IsWindowVisible(w)) { found=w; return false; } return true; },IntPtr.Zero); return found; }
@@ -63,6 +72,10 @@ function State-Point([int]$x, [int]$y) {
   $lw = 620; $lh = 400
   if ($StateDemo -eq 'laboratorio') { $lw = 960; $lh = 720 }
   if ($StateDemo -eq 'musical') { $lw = 1100; $lh = 760 }
+  if ($StateDemo -eq 'companion') { $lw = 620; $lh = 760 }
+  if ($StateDemo -eq 'editor') { $lw = 1120; $lh = 800 }
+  if ($StateDemo -eq 'scriptorium') { $lw = 1440; $lh = 900 }
+  if ($StateDemo -eq 'mapa') { $lw = 1200; $lh = 780 }
   $scale = [Math]::Min($client.right / $lw, $client.bottom / $lh)
   $px = [int](($client.right - $lw * $scale) / 2 + $x * $scale)
   $py = [int](($client.bottom - $lh * $scale) / 2 + $y * $scale)
@@ -73,7 +86,57 @@ function State-Drag([int]$x, [int]$y, [int]$end) { [TomDesktop]::Drag($window,(S
 try {
   if ($StateDemo) {
     Start-Sleep -Milliseconds 700
-    if ($StateDemo -eq 'musical') {
+    if ($StateDemo -eq 'scriptorium') {
+      [void][TomDesktop]::SetForegroundWindow($window)
+      [void][TomDesktop]::PostMessage($window,0x7,[IntPtr]::Zero,[IntPtr]::Zero)
+      Pause-Frame
+      State-Click 650 200
+      Send-Text 'desktopscriptorium coração'
+      State-Click 1360 104
+      $deadline = [DateTime]::UtcNow.AddSeconds(25)
+      while (!(Test-Path -LiteralPath $Ready) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
+      if (!(Test-Path -LiteralPath $Ready)) { throw 'Scriptorium did not save native input.' }
+      State-Click 320 36; State-Click 730 850
+      State-Click 250 36
+      [void][TomDesktop]::SetWindowPos($window,[IntPtr]::Zero,0,0,1320,840,6)
+      Pause-Frame
+    } elseif ($StateDemo -eq 'editor') {
+      [void][TomDesktop]::SetForegroundWindow($window)
+      [void][TomDesktop]::PostMessage($window,0x7,[IntPtr]::Zero,[IntPtr]::Zero)
+      Pause-Frame
+      State-Click 60 166
+      Send-Text 'desktopeditor'
+      for ($i=0; $i -lt 12; $i++) { Send-Key 9 }
+      Send-Key 13
+      if ($Ready) {
+        $deadline = [DateTime]::UtcNow.AddSeconds(25)
+        while (!(Test-Path -LiteralPath $Ready) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
+        if (!(Test-Path -LiteralPath $Ready)) { throw 'Native editor save did not complete.' }
+      }
+      Start-Sleep -Milliseconds 400
+      Send-Key 9; Send-Key 9; Send-Key 9
+      [void][TomDesktop]::SetWindowPos($window,[IntPtr]::Zero,0,0,1300,940,6)
+      Start-Sleep -Milliseconds 300
+    } elseif ($StateDemo -eq 'mapa') {
+      State-Click 350 130; Send-Key 9; Send-Key 9; Send-Key 13; Send-Key 32
+      Start-Sleep -Milliseconds 600
+      Send-Key 52; Send-Key 48
+      State-Drag 350 130 450
+      [TomDesktop]::Wheel($window,(State-Point 450 130)); Pause-Frame
+      Send-Key 9; Send-Key 13; Send-Key 77; Send-Key 39 $true
+      [void][TomDesktop]::SetWindowPos($window,[IntPtr]::Zero,0,0,1360,900,6)
+      [void][TomDesktop]::PostMessage($window,0x8,[IntPtr]::Zero,[IntPtr]::Zero); Pause-Frame
+      [void][TomDesktop]::PostMessage($window,0x7,[IntPtr]::Zero,[IntPtr]::Zero)
+    } elseif ($StateDemo -eq 'companion') {
+      State-Click 354 640
+      State-Click 450 680
+      State-Click 560 250
+      Send-Key 9
+      Send-Key 13
+      State-Click 550 640
+      [void][TomDesktop]::SetWindowPos($window,[IntPtr]::Zero,0,0,780,950,6)
+      Pause-Frame
+    } elseif ($StateDemo -eq 'musical') {
       if (-not $Production) { State-Click 820 520; State-Click 420 500; Send-Key 90; State-Click 245 380; State-Click 160 680 }
       State-Click 180 590
       Start-Sleep -Milliseconds 1200

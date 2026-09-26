@@ -1,0 +1,37 @@
+# Saídas de compilação e pacotes
+/build/
+/dist/
+/support/
+/.tools/
+/node_modules/
+/coverage/
+/.cache/
+*.log
+*.tmp
+*.partial
+*.zip
+*.tar.gz
+*.sha256
+*.vsix
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+*.a
+*.pdb
+
+# Sessões e preferências locais
+.tom-companion/
+/companion-install.json
+/SHA256.json
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db

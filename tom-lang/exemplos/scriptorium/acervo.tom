@@ -1,0 +1,119 @@
+// Demonstração técnica: execute em uma pasta exclusiva para este exemplo.
+Importar[l'tom/sqlite']
+
+DefFuncaoxContar[RefBancoSQLitexBanco,TxtxSQL]yInSd64
+DefRecursoxConsultaySQLitePreparar[@Banco,@SQL]
+SQLiteAvancar[@Consulta]
+Exigir[@ULTIMO]
+SQLiteColunaInSd64[@Consulta,0]
+Retornarx@ULTIMO
+FimFuncao
+
+DefFuncaoxPrepararAcervo[RefBancoSQLitexBanco]yVazio
+ChamarxContar[@Banco,l'PRAGMA user_version']
+DefVarInSd64xVersaoy@ULTIMO
+CompararIgualxyInSd64x@Versaoy0
+Sex@ULTIMO
+DefRecursoxTransacaoySQLiteTransacaoIniciar[@Banco]
+ChamarxSQLiteExecutar[@Banco,l'CREATE TABLE textos(id INTEGER PRIMARY KEY, titulo TEXT NOT NULL, autor TEXT NOT NULL, heteronimo TEXT, genero TEXT NOT NULL, data TEXT NOT NULL, rascunho INTEGER NOT NULL CHECK(rascunho IN (0,1)), conteudo TEXT NOT NULL)']
+ChamarxSQLiteExecutar[@Banco,l'CREATE TABLE categorias(id INTEGER PRIMARY KEY, nome TEXT NOT NULL UNIQUE)']
+ChamarxSQLiteExecutar[@Banco,l'CREATE TABLE texto_categorias(texto INTEGER NOT NULL REFERENCES textos(id) ON DELETE CASCADE, categoria INTEGER NOT NULL REFERENCES categorias(id), PRIMARY KEY(texto,categoria))']
+ChamarxSQLiteExecutar[@Banco,l'CREATE VIRTUAL TABLE pesquisa USING fts5(titulo, conteudo, content=\'textos\', content_rowid=\'id\', tokenize=\'unicode61 remove_diacritics 2\')']
+ChamarxSQLiteExecutar[@Banco,l'CREATE TRIGGER textos_inserir AFTER INSERT ON textos BEGIN INSERT INTO pesquisa(rowid,titulo,conteudo) VALUES(new.id,new.titulo,new.conteudo); END']
+ChamarxSQLiteExecutar[@Banco,l'CREATE TRIGGER textos_apagar AFTER DELETE ON textos BEGIN INSERT INTO pesquisa(pesquisa,rowid,titulo,conteudo) VALUES(\'delete\',old.id,old.titulo,old.conteudo); END']
+ChamarxSQLiteExecutar[@Banco,l'CREATE TRIGGER textos_alterar AFTER UPDATE ON textos BEGIN INSERT INTO pesquisa(pesquisa,rowid,titulo,conteudo) VALUES(\'delete\',old.id,old.titulo,old.conteudo); INSERT INTO pesquisa(rowid,titulo,conteudo) VALUES(new.id,new.titulo,new.conteudo); END']
+ChamarxSQLiteExecutar[@Banco,l'PRAGMA user_version=1']
+SQLiteTransacaoConfirmar[@Transacao]
+Senao
+CompararIgualxyInSd64x@Versaoy1
+Exigir[@ULTIMO]
+FimSe
+FimFuncao
+
+DefFuncaoxCadastrar[RefBancoSQLitexBanco,TxtxConteudo]yVazio
+ChamarxContar[@Banco,l'SELECT count(*) FROM textos WHERE id=1']
+CompararIgualxyInSd64x@ULTIMOy0
+Sex@ULTIMO
+DefRecursoxTransacaoySQLiteTransacaoIniciar[@Banco]
+DefRecursoxConsultaySQLitePreparar[@Banco,l'INSERT INTO textos VALUES(?1,?2,?3,?4,?5,?6,?7,?8)']
+SQLiteVincularInSd64[@Consulta,1,1]
+SQLiteVincularTexto[@Consulta,2,l'O coração da biblioteca']
+SQLiteVincularTexto[@Consulta,3,l'Autora de exemplo']
+SQLiteVincularTexto[@Consulta,4,l'Clara do Vale']
+SQLiteVincularTexto[@Consulta,5,l'Romance']
+SQLiteVincularTexto[@Consulta,6,l'2026-09-17']
+SQLiteVincularBl[@Consulta,7,Verdadeiro]
+SQLiteVincularTexto[@Consulta,8,@Conteudo]
+SQLiteAvancar[@Consulta]
+NaoBlx@ULTIMO
+Exigir[@ULTIMO]
+ChamarxSQLiteExecutar[@Banco,l'INSERT INTO categorias VALUES(1,\'Memória\'),(2,\'Biblioteca\')']
+ChamarxSQLiteExecutar[@Banco,l'INSERT INTO texto_categorias VALUES(1,1),(1,2)']
+SQLiteTransacaoConfirmar[@Transacao]
+FimSe
+FimFuncao
+
+DefFuncaoxValidarAcervo[RefBancoSQLitexBanco,TxtxOriginal]yVazio
+DefRecursoxConsultaySQLitePreparar[@Banco,l'SELECT conteudo FROM textos WHERE id=1']
+SQLiteAvancar[@Consulta]
+Exigir[@ULTIMO]
+DefRecursoxRecuperadoyTextoCriar[l'',67108864]
+SQLiteColunaTexto[@Consulta,0,@Recuperado]
+TextosIguais[@Recuperado,@Original]
+Exigir[@ULTIMO]
+QuantidadeCaracteresTxt[@Recuperado]
+CompararIgualxyInUd64x@ULTIMOy1024000
+Exigir[@ULTIMO]
+SQLiteReiniciar[@Consulta]
+ChamarxContar[@Banco,l'SELECT count(*) FROM pesquisa JOIN textos ON textos.id=pesquisa.rowid JOIN texto_categorias ON texto_categorias.texto=textos.id JOIN categorias ON categorias.id=texto_categorias.categoria WHERE pesquisa MATCH \'coracao\' AND autor=\'Autora de exemplo\' AND heteronimo=\'Clara do Vale\' AND genero=\'Romance\' AND data >= \'2026-01-01\' AND rascunho=1 AND categorias.nome=\'Memória\'']
+CompararIgualxyInSd64x@ULTIMOy1
+Exigir[@ULTIMO]
+FimFuncao
+
+DefRecursoxOriginalyTextoCriar[l'á🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈éá🐈é',67108864]
+ParaxI[0,10,1]
+AnexarTxt[@Original,@Original]
+FimPara
+EscopoInixAcervo
+DefRecursoxBancoySQLiteAbrir[l'acervo-demonstracao.sqlite']
+ChamarxPrepararAcervo[@Banco]
+ChamarxCadastrar[@Banco,@Original]
+EscopoInixAlteracoes
+DefRecursoxTransacaoySQLiteTransacaoIniciar[@Banco]
+ChamarxSQLiteExecutar[@Banco,l'INSERT INTO textos VALUES(2,\'Temporário\',\'Teste\',NULL,\'Nota\',\'2026-09-17\',1,\'primeirapalavra\')']
+ChamarxSQLiteExecutar[@Banco,l'UPDATE textos SET conteudo=\'segundapalavra\' WHERE id=2']
+ChamarxContar[@Banco,l'SELECT count(*) FROM pesquisa WHERE pesquisa MATCH \'primeirapalavra\'']
+CompararIgualxyInSd64x@ULTIMOy0
+Exigir[@ULTIMO]
+ChamarxContar[@Banco,l'SELECT count(*) FROM pesquisa WHERE pesquisa MATCH \'segundapalavra\'']
+CompararIgualxyInSd64x@ULTIMOy1
+Exigir[@ULTIMO]
+ChamarxSQLiteExecutar[@Banco,l'DELETE FROM textos WHERE id=2']
+ChamarxContar[@Banco,l'SELECT count(*) FROM pesquisa WHERE pesquisa MATCH \'segundapalavra\'']
+CompararIgualxyInSd64x@ULTIMOy0
+Exigir[@ULTIMO]
+SQLiteTransacaoConfirmar[@Transacao]
+EscopoFimxAlteracoes
+Tentar
+DefRecursoxTransacaoySQLiteTransacaoIniciar[@Banco]
+ChamarxSQLiteExecutar[@Banco,l'UPDATE textos SET conteudo=\'alteração que deve ser revertida\' WHERE id=1']
+Falhar[4]
+CapturarxErro
+ErroCodigoxErro
+CompararIgualxyInSd32x@ULTIMOy4
+Exigir[@ULTIMO]
+FimTentar
+ChamarxValidarAcervo[@Banco,@Original]
+DefRecursoxCopiaySQLiteAbrir[l'acervo-demonstracao-backup.sqlite']
+SQLiteBackup[@Banco,@Copia]
+EscopoFimxAcervo
+EscopoInixReabertura
+DefRecursoxBancoySQLiteAbrirLeitura[l'acervo-demonstracao.sqlite']
+ChamarxValidarAcervo[@Banco,@Original]
+EscopoFimxReabertura
+EscopoInixRestauracao
+DefRecursoxBancoySQLiteAbrirLeitura[l'acervo-demonstracao-backup.sqlite']
+ChamarxValidarAcervo[@Banco,@Original]
+EscopoFimxRestauracao
+GerarTxtxl'Scriptorium: cadastro, edição, filtros, FTS5, rollback e backup verificados.\n'
+GerarTxtxl'Texto recuperado: 1024000 caracteres.\n'

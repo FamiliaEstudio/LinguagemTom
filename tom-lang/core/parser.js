@@ -175,4 +175,4 @@ function parse(source, file) {
   return root;
 }
 
-module.exports = { parse, argumentsOf };
+module.exports = { parse, argumentsOf, command };

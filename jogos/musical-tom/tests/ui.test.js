@@ -51,7 +51,13 @@ FimPara`.replace('xTexto y','xTextoy');
  fs.writeFileSync(events,'wait 1500\n'+click(820,520)+click(245,380)+'wait 1500\n'+click(420,680)+'quit\n');
  const child=spawn(binary,[],{env,stdio:['ignore','pipe','pipe']});let errors='';child.stderr.on('data',b=>errors+=b);child.stdout.on('data',b=>errors+=b);
  const ended=new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',(status,signal)=>resolve({status,signal}));});
- async function waitFor(value){const until=Date.now()+15000;while(Date.now()<until){if(fs.existsSync(trace)&&fs.readFileSync(trace,'utf8').includes(value))return;await new Promise(r=>setTimeout(r,20));}throw Error('Missing trace: '+value+' '+errors);}
+ async function waitFor(value){const until=Date.now()+15000;while(Date.now()<until){
+  try{if(fs.readFileSync(trace,'utf8').includes(value))return;}catch(error){
+   // WSL/NTFS can report transient ENODATA while the native process appends.
+   if(!['ENOENT','ENODATA'].includes(error.code))throw error;
+  }
+  await new Promise(r=>setTimeout(r,20));
+ }throw Error('Missing trace: '+value+' '+errors);}
  try{
   await waitFor('FRAME');fs.unlinkSync(path.join(data,'perfil.json'));fs.mkdirSync(path.join(data,'perfil.json'));
   await waitFor('Não foi possível salvar');fs.rmdirSync(path.join(data,'perfil.json'));

@@ -165,6 +165,6 @@ int32_t tom_json_set_null(TomJson *j,const char *p){return set(j,p,6,NULL,0,0,0,
 int32_t tom_json_set_i64(TomJson *j,const char *p,int64_t v){return set(j,p,7,NULL,v,0,0,NULL);}
 int32_t tom_json_set_u64(TomJson *j,const char *p,uint64_t v){return set(j,p,8,NULL,0,v,0,NULL);}
 int32_t tom_json_set_decimal(TomJson *j,const char *p,TomDecimal *v) {
-  char text[64];TomText buffer={sizeof(text),0,text};int32_t error=tom_decimal_format(v,&buffer);
+  char text[64];TomText buffer={sizeof(text),0,text,0};int32_t error=tom_decimal_format(v,&buffer);
   return error?error:tom_json_set_text(j,p,text);
 }

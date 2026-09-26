@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Livro aberto do Scriptorium">
+<rect x="8" y="8" width="240" height="240" rx="48" fill="#1b2844"/>
+<polygon points="31,75 78,63 128,77 178,63 225,75 225,190 178,179 128,193 78,179 31,190" fill="#c4914d"/>
+<polygon points="39,80 78,70 123,83 123,179 78,166 39,176" fill="#f4ead4"/>
+<polygon points="217,80 178,70 133,83 133,179 178,166 217,176" fill="#fff6e4"/>
+<polygon points="57,103 78,98 105,105 105,110 78,103 57,108" fill="#8791a0"/>
+<polygon points="57,125 78,120 105,127 105,132 78,125 57,130" fill="#8791a0"/>
+<polygon points="57,147 78,142 105,149 105,154 78,147 57,152" fill="#8791a0"/>
+<polygon points="199,103 178,98 151,105 151,110 178,103 199,108" fill="#8791a0"/>
+<polygon points="199,125 178,120 151,127 151,132 178,125 199,130" fill="#8791a0"/>
+<polygon points="199,147 178,142 151,149 151,154 178,147 199,152" fill="#8791a0"/>
+<rect x="124" y="79" width="8" height="108" rx="4" fill="#d7a45e"/>
+</svg>

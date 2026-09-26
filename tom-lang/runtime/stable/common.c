@@ -17,6 +17,11 @@ const char *tom_error_message(int32_t code) {
     case TOM_MEMORY: return "Memória insuficiente.";
     case TOM_RESOURCE: return "Falha de recurso (janela, áudio ou arquivo).";
     case TOM_LATE: return "A posição de áudio solicitada já foi processada.";
+    case TOM_SQLITE: return "Falha SQLite (SQL, abertura, estado ou arquivo).";
+    case TOM_SQLITE_BUSY: return "Banco SQLite ocupado ou bloqueado.";
+    case TOM_SQLITE_READONLY: return "Banco SQLite somente para leitura.";
+    case TOM_CONFLICT: return "Conflito de revisão: outro estado já foi gravado.";
+    case TOM_SQLITE_CONSTRAINT: return "Restrição de integridade SQLite violada.";
     default: return "Erro interno do runtime.";
   }
 }

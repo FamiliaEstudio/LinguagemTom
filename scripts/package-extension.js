@@ -7,6 +7,6 @@ const manifest = require('../tom-lang/package.json');
 const output = path.join(directory, 'build', `tom-lang-${manifest.version}.vsix`);
 fs.mkdirSync(path.dirname(output), { recursive: true });
 fs.writeFileSync(path.join(directory, 'syntaxes/tom.tmGrammar.json'), JSON.stringify(require('../tom-lang/editor/grammar').createGrammar(), null, 2) + '\n');
-const result = spawnSync(process.execPath, [path.join(directory, 'node_modules/@vscode/vsce/vsce'), 'package', '--no-dependencies', '--allow-missing-repository', '--skip-license', '-o', output], { cwd: directory, stdio: 'inherit' });
+const result = spawnSync(process.execPath, [path.join(directory, 'node_modules/@vscode/vsce/vsce'), 'package', '--no-dependencies', '--allow-missing-repository', '--skip-license', '--baseContentUrl', 'https://github.com/FamiliaEstudio/LinguagemTom/blob/main/tom-lang/', '--baseImagesUrl', 'https://github.com/FamiliaEstudio/LinguagemTom/raw/main/tom-lang/', '-o', output], { cwd: directory, stdio: 'inherit' });
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;

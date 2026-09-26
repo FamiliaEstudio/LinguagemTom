@@ -72,7 +72,8 @@ int32_t tom_data_read(TomUserData *data,const char *relative,uint64_t limit,TomT
   if(!out || limit>INT32_MAX)return TOM_INVALID;
   char *path=NULL; int32_t error=filename(data,relative,&path); if(error)return error;
   FILE *f=open_read(path); free(path); if(!f)return TOM_RESOURCE;
-  size_t cap=(size_t)(limit < out->capacity-1 ? limit : out->capacity-1);
+  uint64_t maximum=(out->limit ? out->limit : out->capacity)-1;
+  size_t cap=(size_t)(limit < maximum ? limit : maximum);
   char *buffer=malloc(cap+1); if(!buffer){ fclose(f); return TOM_MEMORY; }
   size_t count=fread(buffer,1,cap,f); int extra=fgetc(f);
   if(ferror(f))error=TOM_RESOURCE;

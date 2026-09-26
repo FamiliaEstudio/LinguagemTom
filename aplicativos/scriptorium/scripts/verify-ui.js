@@ -1,0 +1,61 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const {spawn}=require('node:child_process');
+const {DatabaseSync}=require('node:sqlite');
+const {packageApplication}=require('./package');
+const {platform}=require('../../../tom-lang/core/native-build');
+const root=path.join(platform,'scriptorium/validation');
+function run(binary,dir,events){
+ const eventFile=path.join(dir,'events.txt'),trace=path.join(dir,'trace.txt');fs.writeFileSync(eventFile,events.replace(/wait (\d+)\n/g,(_,n)=>'wait 50\n'.repeat(Math.ceil(Number(n)/50))));
+ const env={...process.env,SDL_VIDEODRIVER:'dummy',SDL_RENDER_DRIVER:'software',TOM_DATA_DIRECTORY:dir,TOM_UI_EVENTS:eventFile,TOM_UI_TRACE:trace};
+ env.PATH=process.platform==='win32'?`${process.env.SystemRoot}/System32;${process.env.SystemRoot}`:'/usr/bin:/bin';
+ for(const key of ['CLANG','LLVM_OPT','LD_LIBRARY_PATH','NODE_PATH','NODE_OPTIONS'])delete env[key];
+ return new Promise((resolve,reject)=>{const child=spawn(binary,[],{cwd:dir,env,stdio:['ignore','pipe','pipe']});let out='';child.stdout.on('data',b=>out+=b);child.stderr.on('data',b=>out+=b);const timeout=setTimeout(()=>child.kill('SIGKILL'),30000);child.once('error',reject);child.once('exit',(code,signal)=>{clearTimeout(timeout);if(code!==0)return reject(Error(`UI ${code}/${signal}: ${out}\n${fs.existsSync(trace)?fs.readFileSync(trace,'utf8').slice(-3000):''}`));resolve({out,trace});});});
+}
+async function main(){fs.mkdirSync(root,{recursive:true});const results=[];for(const optimize of ['-O0','-O2']){
+ const binary=packageApplication({optimize,testUI:true});const dir=fs.mkdtempSync(path.join(root,'ui-'));
+ const first=await run(binary,dir,'text A rocha e o coração.\nkeydown 115 64\nwait 500\nquit\nwait 200\n');assert.match(first.out,/Scriptorium encerrado/);
+ const db=new DatabaseSync(path.join(dir,'acervo/dados.sqlite'));assert.equal(db.prepare('SELECT conteudo FROM acervo').get().conteudo,'A rocha e o coração.');assert.equal(db.prepare('SELECT count(*) AS n FROM versoes').get().n,1);db.close();
+ await run(binary,dir,'keydown 1073741901 64\ntext  Alteração descartada.\nquit\nmouse 850 298\nrelease 850 298\nquit\nmouse 730 298\nrelease 730 298\nwait 400\n');
+ const after=new DatabaseSync(path.join(dir,'acervo/dados.sqlite'));assert.equal(after.prepare('SELECT conteudo FROM acervo').get().conteudo,'A rocha e o coração.');assert.equal(after.prepare('SELECT count(*) AS n FROM tom_editor_recuperacoes').get().n,0);after.close();
+ const click=(x,y)=>`mouse ${x} ${y}\nrelease ${x} ${y}\n`,key=(k,m=0)=>`keydown ${k} ${m}\n`,save=key(115,64)+'wait 400\n';
+ const emptyDir=fs.mkdtempSync(path.join(root,'empty-'));
+ await run(binary,emptyDir,'quit\nwait 100\n');
+ const afterEmpty=new DatabaseSync(path.join(emptyDir,'acervo/dados.sqlite'));
+ assert.equal(afterEmpty.prepare('SELECT count(*) AS n FROM versoes').get().n,0);
+ assert.equal(afterEmpty.prepare('SELECT count(*) AS n FROM tom_editor_recuperacoes').get().n,0);afterEmpty.close();
+ const newDir=fs.mkdtempSync(path.join(root,'new-'));
+ await run(binary,newDir,'text Texto confirmado.\n'+save+key(110,64)+'quit\nwait 100\n');
+ const afterNew=new DatabaseSync(path.join(newDir,'acervo/dados.sqlite'));
+ assert.equal(afterNew.prepare('SELECT count(*) AS n FROM versoes').get().n,1);
+ assert.equal(afterNew.prepare('SELECT count(*) AS n FROM tom_editor_recuperacoes').get().n,0);afterNew.close();
+ const closeDir=fs.mkdtempSync(path.join(root,'close-'));
+ await run(binary,closeDir,'text Texto pendente.\nquit\nquit\n'+click(630,298)+'wait 400\n');
+ const afterClose=new DatabaseSync(path.join(closeDir,'acervo/dados.sqlite'));
+ assert.equal(afterClose.prepare('SELECT conteudo FROM acervo').get().conteudo,'Texto pendente.');afterClose.close();
+ const dateDir=fs.mkdtempSync(path.join(root,'date-'));
+ await run(binary,dateDir,click(320,36)+key(9).repeat(10)+key(97,64)+'text 25/09/2026\n'+key(9)+key(97,64)+'text 01/01/2027/31/12/2027\n'+click(620,850)+save+'quit\n');
+ const dates=new DatabaseSync(path.join(dateDir,'acervo/dados.sqlite'));
+ assert.deepEqual({...dates.prepare('SELECT composicao,publicacao FROM acervo').get()},{composicao:'2026-09-25',publicacao:'2027-01-01/2027-12-31'});dates.close();
+ const invalidDir=fs.mkdtempSync(path.join(root,'invalid-date-'));
+ const invalid=await run(binary,invalidDir,click(320,36)+key(9).repeat(10)+key(97,64)+'text 31/02/2026\n'+click(620,850)+save+'quit\n'+click(730,298)+'wait 100\n');
+ assert.match(fs.readFileSync(invalid.trace,'utf8'),/Ficha inválida: revise Composição/);
+ const invalidDb=new DatabaseSync(path.join(invalidDir,'acervo/dados.sqlite'));
+ assert.equal(invalidDb.prepare('SELECT count(*) AS n FROM versoes').get().n,0);invalidDb.close();
+ const titleDir=fs.mkdtempSync(path.join(root,'title-'));
+ await run(binary,titleDir,click(600,88)+key(97,64)+'text Título pelo cabeçalho\n'+click(620,850)+save+'quit\n');
+ const titled=new DatabaseSync(path.join(titleDir,'acervo/dados.sqlite'));
+ assert.equal(titled.prepare('SELECT titulo FROM acervo').get().titulo,'Título pelo cabeçalho');titled.close();
+ await run(binary,dir,click(320,36)+key(97,64)+'text Poema de 2011\n'+key(9).repeat(8)+'text Eric Lacques\n'+key(9)+key(1073741903).repeat(2)+key(9)+'text 2011\n'+key(9)+'text 2026-09\n'+key(9)+'text rocha\n'+key(9)+'text Ciclo\n'+key(9)+'text Atribuído após releitura em 2026.\n'+click(620,850)+save+key(1073741901,64)+'text Segunda revisão.\n'+save+click(490,36)+'text NÃO ALTERAR\n'+click(1090,850)+'text NÃO ALTERAR FICHA\n'+click(640,850)+click(870,850)+save+key(1073741901,64)+'text Continuação.\n'+save+click(140,408)+click(70,480)+click(385,844)+click(270,844)+click(65,447)+'quit\n');
+ const history=new DatabaseSync(path.join(dir,'acervo/dados.sqlite'));const versions=history.prepare('SELECT * FROM versoes ORDER BY id').all();assert.equal(versions.length,5);assert.equal(versions[1].composicao,'2011');assert.equal(versions[1].persona,'Eric Lacques');assert.equal(versions[3].pai_id,versions[1].id);assert.equal(versions[4].pai_id,versions[3].id);assert.equal(versions[4].conteudo,'A rocha e o coração.Continuação.');assert.equal(history.prepare('SELECT count(*) AS n FROM atribuicoes').get().n,2);history.close();
+ const poems=path.join(dir,'poemas.txt');fs.writeFileSync(poems,'Primeiro poema.\n\nSegundo poema.');
+ await run(binary,dir,click(590,36)+`text ${poems.replaceAll('\\','/')}\n`+click(620,850)+'wait 700\n'+key(1073741898,64)+key(1073741901,1)+click(650,850)+'wait 400\n'+key(1073741901,64)+key(1073741898)+key(1073741901,1)+click(650,850)+'wait 400\n'+click(1030,850)+click(690,36)+click(620,850)+'wait 700\n'+click(780,36)+'wait 700\nquit\n');
+ const imported=new DatabaseSync(path.join(dir,'acervo/dados.sqlite'));assert.equal(imported.prepare('SELECT count(*) AS n FROM acervo').get().n,3);assert.deepEqual(imported.prepare("SELECT conteudo FROM acervo WHERE titulo='Texto importado' ORDER BY id").all().map(x=>x.conteudo),['Primeiro poema.','Segundo poema.']);assert.equal(imported.prepare('SELECT count(*) AS n FROM fontes').get().n,1);assert.equal(imported.prepare('SELECT count(*) AS n FROM versao_fontes').get().n,2);imported.close();assert.ok(fs.existsSync(path.join(dir,'exportacao.docx')));
+ const backup=path.join(dir,'backups',fs.readdirSync(path.join(dir,'backups')).find(x=>x.startsWith('snapshot-')));
+ await run(binary,dir,click(978,36)+key(97,64)+`text ${backup.replaceAll('\\','/')}\n`+click(620,850)+'wait 800\nquit\n');
+ const config=JSON.parse(fs.readFileSync(path.join(dir,'configuracao.json'))),restored=new DatabaseSync(path.join(config.acervo,'dados.sqlite'));assert.equal(restored.prepare('SELECT count(*) AS n FROM acervo').get().n,3);const current=restored.prepare('SELECT * FROM tom_editor_documentos WHERE id=(SELECT texto_id FROM acervo ORDER BY id DESC LIMIT 1)').get();const draft=JSON.parse(current.documento);draft.texto+=' Recuperado.';draft.estilos=[[Array.from(draft.texto).length,3072]];const context=JSON.parse(current.contexto);context.ficha.titulo='Ficha recuperada';restored.prepare('UPDATE tom_editor_revisoes SET sequencia=sequencia+1 WHERE id=?').run(current.id);restored.prepare('INSERT OR REPLACE INTO tom_editor_recuperacoes(id,revisao_base,sequencia,texto,documento,contexto) SELECT ?,?,sequencia,?,?,? FROM tom_editor_revisoes WHERE id=?').run(current.id,current.revisao,draft.texto,JSON.stringify(draft),JSON.stringify(context),current.id);restored.close();assert.ok(fs.existsSync(path.join(dir,'acervo/dados.sqlite')));
+ await run(binary,dir,click(620,298)+save+'quit\n');const recovered=new DatabaseSync(path.join(config.acervo,'dados.sqlite'));assert.equal(recovered.prepare('SELECT titulo FROM acervo WHERE texto_id=?').get(current.id).titulo,'Ficha recuperada');assert.equal(recovered.prepare('SELECT conteudo FROM acervo WHERE texto_id=?').get(current.id).conteudo,draft.texto);recovered.close();
+ results.push({optimize,binary,dir,save:true,cancel:true,discard:true,metadata:true,restoreVersion:true,splitImport:true,export:true,backup:true,restoreCorpus:true,recovery:true,pagination:true});console.log(`Scriptorium ${optimize}: ficha, histórico, divisão, exportação e restauração OK`);
+ }
+ fs.writeFileSync(path.join(root,'ui-results.json'),JSON.stringify({platform:process.platform,date:new Date().toISOString(),results},null,2)+'\n');return results;}
+module.exports={run,main};if(require.main===module)main().catch(e=>{console.error(e.stack);process.exitCode=1;});

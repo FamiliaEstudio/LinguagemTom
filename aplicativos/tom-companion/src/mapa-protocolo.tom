@@ -1,0 +1,10 @@
+Importar[l'./mapa-modelo.tom']
+Importar[l'./mapa-canal.tom']
+DefFuncaoxMapaReceber[RefCanalMensagensxCanal,RefJsonxConexao,RefJsonxEtapa,RefJsonxAtual,RefRegistro<MapaEstado>xEstado,RefSOA<GrafoNo>xNos,RefSOA<GrafoAresta>xArestas,RefCatalogoVisualxCatalogo,FontexFonte,TxtxTexto,RefFB4096CxAviso]yVazio
+ChamarxMapaReceberDados[@Canal,@Conexao,@Etapa,@Atual,@Estado,@Nos,@Arestas,@Texto,@Aviso]
+Sex@ULTIMO
+TempoAgoraNs[]
+ChamarxMapaAplicar[@Nos,@Arestas,@Catalogo,@Fonte,@Atual,@Etapa,@Estado.blocos,@Estado.nos,@Estado.arestas,@ULTIMO]
+ChamarxMapaConfirmar[@Canal,@Conexao,@Estado,@Nos,@Arestas]
+FimSe
+FimFuncao

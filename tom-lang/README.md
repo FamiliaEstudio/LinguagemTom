@@ -3,6 +3,10 @@
 Realce de sintaxe, snippets e diagnósticos do compilador Tom 0.4. A extensão
 reconhece arquivos `.tom`; não exige LLVM ou SDL para colorir e validar o fonte.
 
+Inclui também os recursos `Texto`, `BancoSQLite`, `ConsultaSQLite` e
+`TransacaoSQLite`, com snippets de texto dinâmico e consulta parametrizada.
+Veja o [contrato de texto e SQLite](docs/texto-sqlite.md).
+
 ## Instalar o pacote local
 
 1. Abra **Extensões** (`Ctrl+Shift+X`).
@@ -68,6 +72,23 @@ respeita temas claros, escuros e de alto contraste, sem trocar suas preferência
 
 ## Gerar e testar a extensão
 
+O [Tom Companion 0.1](../aplicativos/tom-companion/README.md) acrescenta os comandos
+**Tom: Abrir Tom Companion**, explicar seleção, verificar, executar, interromper e
+empacotar a calculadora. Abra pelo botão no título do editor, pela barra inferior,
+pela paleta ou por **Ctrl+Alt+Shift+T** com um arquivo Tom aberto. O repositório e
+suas subpastas são detectados automaticamente; a última calculadora é lembrada.
+Os caminhos `tom.companion.installation` e `tom.companion.toolchain` continuam
+disponíveis para pacotes separados. O código não salvo acompanha as revisões;
+os processos de análise e compilação ficam separados do editor. O acompanhamento
+e o mapa aparecem na lateral e no painel inferior, seguindo o tema do VS Code.
+A lógica permanece em processos Tom sem janela, instalados com as ferramentas
+locais fora do VSIX. **Tom: Encerrar Tom Companion** salva e encerra as sessões. Iniciar processos exige uma
+pasta confiável; no WSL, instale a extensão no ambiente WSL e use o pacote Linux.
+
+Use **Copiar código** no painel ou **Tom: Companion: copiar código do passo** na
+paleta para revelar e copiar a solução diretamente. Cole no editor com Ctrl+V;
+caracteres e quebras de linha são preservados, sem alteração automática do arquivo.
+
 Na raiz do repositório, com Node 24 disponível:
 
 ```sh
@@ -85,3 +106,13 @@ ferramentas de desenvolvimento e os runtimes nativos não acompanham a extensão
 Referências: [realce de sintaxe](https://code.visualstudio.com/api/language-extensions/syntax-highlight-guide)
 e [instalação de VSIX](https://code.visualstudio.com/docs/configure/extensions/extension-marketplace#_install-from-a-vsix)
 na documentação oficial do VS Code. Este pacote local não foi publicado no Marketplace.
+
+## Mapa do código no Companion
+
+Use **Tom: Abrir mapa do código no Companion** no VS Code para acompanhar módulos,
+funções, variáveis e resultados locais enquanto escreve, inclusive antes de salvar.
+Veja [uso do mapa](../aplicativos/tom-companion/MAPA.md) e [API e bibliotecas](docs/code-map.md).
+
+### Editor para escritores
+
+`DocumentoTexto` oferece grafemas Unicode, formatação e histórico; `EditorTexto` acrescenta edição SDL; `tom/editor_sqlite` mantém salvamento manual e recuperação automática separados. Veja a [interface e contratos](docs/editor-texto.md) e a [oficina de escrita](exemplos/editor/README.md).

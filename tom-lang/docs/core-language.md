@@ -1,5 +1,8 @@
 # Contrato do núcleo Tom 0.4
 
+O complemento [análise e comunicação local](companion-api.md) documenta a API pura
+`analyze()` e o recurso lexical `CanalMensagens`, usados pelo Tom Companion 0.1.
+
 Este documento descreve somente o compilador estável. Exemplos executáveis e seus
 resultados estão em `../exemplos/manifest.json`. Recursos não descritos aqui são
 rejeitados. Não há compatibilidade de comportamento com erros do compilador antigo.
@@ -287,6 +290,11 @@ Mudança da 0.2: erros não capturados também executam Defer antes de encerrar 
 
 ## Operações de buffer UTF-8
 
+O recurso dinâmico `Texto`, criado com `TextoCriar[Conteudo,LimiteBytes]`, também
+é aceito pelas operações textuais. O limite inclui NUL; a capacidade cresce sob
+demanda. `FBnC` conserva capacidade fixa. Veja [texto dinâmico e SQLite](texto-sqlite.md)
+para inserção, remoção, substituição, busca, vistas emprestadas e persistência.
+
 As operações usam `Nome[arg1,arg2,...]`. `@Nome` referencia uma variável; `l'...'`
 representa texto. Destinos exigem buffer mutável. Todos os índices de caracteres
 contam pontos de código Unicode, não clusters de grafemas: um acento combinante
@@ -442,3 +450,16 @@ O [contrato multimídia](multimedia-0.3.md) detalha tempo, entrada, desenho e á
 As transformações de visuais, formas arredondadas e bibliotecas `tom/cores`,
 `tom/animacao` e `tom/efeitos` estão descritas no [contrato visual](visual-2d.md).
 O desenho com tema é opt-in; `UIDesenhar` mantém sua aparência anterior.
+
+## Câmera e grafos
+
+`RaizQuadradaFl64`, `HipotenusaFl64`, eventos de rolagem e campos precisos do
+ponteiro sustentam `tom/geometria`, `tom/canvas` e `tom/grafos`. O
+[contrato do mapa](code-map.md) documenta assinaturas, capacidades, identidades e
+análise estática de código incompleto. A sintaxe dos programas existentes é preservada.
+
+## Documento, editor e persistência
+
+Os recursos `DocumentoTexto`, `EditorTexto` e `PersistenciaDocumentoSQLite` têm parâmetros emprestados de leitura e variantes `Ref` para alteração, limpeza lexical e proibição de campos em registros. Seus contratos, eventos de composição e formato JSON estão em [Documento e editor de texto](editor-texto.md). A declaração e a verificação usam o mesmo registro nativo das demais operações estáveis.
+
+Os recursos `Formulario`, `DialogoArquivo` e `TrabalhoArquivo`, as operações binárias e a conversão DOCX estão descritos em [Arquivos e DOCX](arquivos-docx.md). `Formulario` pertence à janela; os demais têm duração lexical independente. Os empréstimos `Ref` indicam alterações e nenhum desses handles pode ser armazenado em registros.

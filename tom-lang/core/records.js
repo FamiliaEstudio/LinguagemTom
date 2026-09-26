@@ -3,36 +3,7 @@ const { fail } = require('./source');
 const { typeOf, sameType } = require('./types');
 const { Emitter: ScalarEmitter } = require('./scalar-emitter');
 
-function resolveTypes(ast) {
-  const types = new Map(), definitions = new Map(), active = new Set();
-  for (const node of ast.body.filter(x => ['enum', 'record'].includes(x.kind))) {
-    if (definitions.has(node.name)) fail('E_DUPLICATE', `Tipo '${node.name}' duplicado.`, node.location);
-    if (!node.properties.length) fail('E_TYPE', 'Tipo deve conter pelo menos um membro.', node.location);
-    definitions.set(node.name, node);
-  }
-  function resolve(type, loc) {
-    if (!['enum', 'record'].includes(type.kind)) return type;
-    const definition = definitions.get(type.nominal);
-    if (!definition || definition.kind !== type.kind) fail('E_TYPE', `Tipo '${type.name}' não foi declarado.`, loc);
-    if (active.has(type.name)) fail('E_TYPE_CYCLE', `Registro circular: ${type.name}.`, loc);
-    if (types.has(type.name)) return types.get(type.name);
-    active.add(type.name);
-    const value = { ...type, properties: definition.properties.map(p => ({ ...p, type: p.type && resolve(p.type, p.location) })) };
-    active.delete(type.name); types.set(type.name, value); return value;
-  }
-  for (const node of definitions.values()) resolve(typeOf(`${node.kind === 'enum' ? 'Enum' : 'Registro'}<${node.name}>`), node.location);
-  function walk(node) {
-    if (node.type) node.type = resolve(node.type, node.location);
-    if (node.kind === 'struct') for (const p of node.properties) {
-      if (['decimal', 'record'].includes(p.type.kind)) fail('E_TYPE', 'SOA aceita inteiros, floats, Bl e enumerações.', p.location);
-    }
-    if (node.result && node.result !== 'Vazio') resolve(typeOf(node.result), node.location);
-    for (const p of node.params || []) p.type = resolve(p.type, node.location);
-    for (const key of ['body', 'otherwise', 'handler', 'properties']) for (const child of node[key] || []) walk(child);
-    if (node.child) walk(node.child);
-  }
-  walk(ast); return types;
-}
+const { resolveTypes } = require('./nominal-types');
 
 const methods = {
   resolved(name) { return this.module.types.get(name) || typeOf(name); },

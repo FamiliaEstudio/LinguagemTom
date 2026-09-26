@@ -102,3 +102,13 @@ test('0.4 snippets compile with nominal types and bounded JSON', () => {
     assert.equal(r.success,true,name+JSON.stringify(r.diagnostics));
   }
 });
+
+test('dynamic text and SQLite snippets compile with library diagnostics',()=>{
+  const {compileResolved}=require('../core/module-loader');
+  const snippets=require('../snippets.json');
+  const expand=body=>body.join('\n').replace(/\$\{\d+:([^{}]*)\}/g,'$1');
+  for(const name of ['Texto dinâmico','SQLite banco e consulta','Documento com histórico','Editor reutilizável','Persistência do documento']) {
+    const result=compileResolved(expand(snippets[name].body));
+    assert.equal(result.success,true,JSON.stringify(result.diagnostics));
+  }
+});

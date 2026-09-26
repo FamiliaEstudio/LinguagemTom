@@ -60,15 +60,15 @@ def text(value):
 def click(px,py):
     e=Event();e.input=Input(4,0,1,d,window,root,0,0,int(px*1.25),int(py*1.25),0,0,0,1,1)
     send(d,window,0,4,C.byref(e));e.input.type=5;send(d,window,0,8,C.byref(e));flush(d);time.sleep(.2)
-def state_pointer(px,py,kind=4):
+def state_pointer(px,py,kind=4,button=1):
     name=sys.argv[sys.argv.index('--state')+1]
-    logical_w,logical_h=(1100,760) if name=='musical' else (960,720) if name=='laboratorio' else (620,400)
+    logical_w,logical_h=(1440,900) if name=='scriptorium' else (1120,800) if name=='editor' else (1200,780) if name=='mapa' else (1100,760) if name=='musical' else (960,720) if name=='laboratorio' else (620,760) if name=='companion' else (620,400)
     r=Window();gx=C.c_int();gy=C.c_int();w=C.c_uint();h=C.c_uint();border=C.c_uint();depth=C.c_uint()
     geometry=bind('XGetGeometry',[Display,Window,C.POINTER(Window),C.POINTER(C.c_int),C.POINTER(C.c_int),C.POINTER(C.c_uint),C.POINTER(C.c_uint),C.POINTER(C.c_uint),C.POINTER(C.c_uint)])
     geometry(d,window,C.byref(r),C.byref(gx),C.byref(gy),C.byref(w),C.byref(h),C.byref(border),C.byref(depth))
     scale=min(w.value/logical_w,h.value/logical_h)
     x_pos=int((w.value-logical_w*scale)/2+px*scale);y_pos=int((h.value-logical_h*scale)/2+py*scale)
-    e=Event();e.input=Input(kind,0,1,d,window,root,0,0,x_pos,y_pos,0,0,256 if kind==6 else 0,0 if kind==6 else 1,1)
+    e=Event();e.input=Input(kind,0,1,d,window,root,0,0,x_pos,y_pos,0,0,256 if kind==6 else 0,0 if kind==6 else button,1)
     e.input.time=int(time.monotonic()*1000)&0xffffffff
     send(d,window,0,64 if kind==6 else 4 if kind==4 else 8,C.byref(e));flush(d);time.sleep(.06)
 def state_click(px,py):
@@ -76,7 +76,49 @@ def state_click(px,py):
 try:
     if '--state' in sys.argv:
         name=sys.argv[sys.argv.index('--state')+1];time.sleep(.7)
-        if name=='musical':
+        if name=='scriptorium':
+            bind('XResizeWindow',[Display,Window,C.c_uint,C.c_uint])(d,window,1440,900);flush(d);time.sleep(.3)
+            state_click(650,200);text('desktopscriptorium');state_click(1360,104)
+            ready=sys.argv[sys.argv.index('--ready')+1]
+            import os
+            deadline=time.monotonic()+25
+            while not os.path.exists(ready) and time.monotonic()<deadline:time.sleep(.05)
+            if not os.path.exists(ready):raise RuntimeError('Scriptorium did not save native input.')
+            state_click(320,36);state_click(730,850);state_click(250,36)
+            bind('XResizeWindow',[Display,Window,C.c_uint,C.c_uint])(d,window,1280,800);flush(d);time.sleep(.3)
+        elif name=='editor':
+            state_click(60,166);text('desktopeditor')
+            # Tab reaches the toolbar independently of pointer capture/XWayland.
+            for _ in range(12):key('Tab')
+            key('Return')
+            ready=sys.argv[sys.argv.index('--ready')+1] if '--ready' in sys.argv else None
+            if ready:
+                import os
+                deadline=time.monotonic()+25
+                while not os.path.exists(ready) and time.monotonic()<deadline:time.sleep(.05)
+                if not os.path.exists(ready):raise RuntimeError('Native editor save did not complete.')
+            time.sleep(.4)
+            key('Tab');key('Tab');key('Tab')
+            bind('XResizeWindow',[Display,Window,C.c_uint,C.c_uint])(d,window,1260,900);flush(d);time.sleep(.3)
+        elif name=='mapa':
+            state_click(350,130)
+            # Two nodes initially: also exercise keyboard focus and tolerate a
+            # window manager consuming the first click solely to activate it.
+            key('Tab');key('Tab');key('Return');key('space');time.sleep(.6)
+            key('4');time.sleep(.3);key('0');time.sleep(.3)
+            state_pointer(350,130);state_pointer(450,130,6);state_pointer(450,130,5)
+            state_pointer(450,130,4,4);state_pointer(450,130,5,4)
+            key('Tab');key('Return');key('m');key('Right')
+            bind('XResizeWindow',[Display,Window,C.c_uint,C.c_uint])(d,window,1320,858);flush(d);time.sleep(.3)
+            state_pointer(700,600)
+            bind('XSetInputFocus',[Display,Window,C.c_int,C.c_ulong])(d,root,1,0);flush(d);time.sleep(.2)
+            bind('XSetInputFocus',[Display,Window,C.c_int,C.c_ulong])(d,window,1,0);flush(d)
+            state_pointer(700,600,5)
+        elif name=='companion':
+            state_click(354,640);state_click(450,680);state_click(560,250)
+            key('Tab');key('Return');state_click(550,640)
+            bind('XResizeWindow',[Display,Window,C.c_uint,C.c_uint])(d,window,744,912);flush(d);time.sleep(.5)
+        elif name=='musical':
             if '--production' not in sys.argv:
                 state_click(820,520);state_click(420,500);key('z');state_click(245,380);state_click(160,680)
             state_click(180,590);time.sleep(1.2);key('F1');text('fcde')

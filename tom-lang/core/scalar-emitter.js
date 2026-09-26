@@ -47,6 +47,7 @@ class Emitter {
     const symbol = this.symbols.get(name);
     if (!symbol) fail('E_UNDEFINED', `'${name}' não foi definido neste escopo.`, location);
     if (kind && symbol.kind !== kind) fail('E_TYPE', `'${name}' não é ${kind}.`, location);
+    this.module?.observer?.use(symbol, name, location, this.currentNode);
     return symbol;
   }
   define(name, value, location) {

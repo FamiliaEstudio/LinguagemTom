@@ -1,0 +1,25 @@
+// Tipos das colunas SQLite; índices de colunas começam em zero.
+DefConstInSd32xSQLITE_INTEIROy1
+DefConstInSd32xSQLITE_REALy2
+DefConstInSd32xSQLITE_TEXTOy3
+DefConstInSd32xSQLITE_BLOBy4
+DefConstInSd32xSQLITE_NULOy5
+DefConstInSd32xSQLITE_ERROy10
+DefConstInSd32xSQLITE_OCUPADOy11
+DefConstInSd32xSQLITE_SOMENTE_LEITURAy12
+DefConstInSd32xSQLITE_INTEGRIDADEy13
+
+// Executa exatamente uma instrução sem resultados e sem parâmetros.
+// Use SQLitePreparar/Vincular/Avancar para valores fornecidos pelo usuário.
+DefFuncaoxSQLiteExecutar[RefBancoSQLitexBanco,TxtxSQL]yVazio
+DefRecursoxConsultaySQLitePreparar[@Banco,@SQL]
+SQLiteAvancar[@Consulta]
+NaoBlx@ULTIMO
+Exigir[@ULTIMO]
+FimFuncao
+
+DefFuncaoxSQLiteColunaNula[ConsultaSQLitexConsulta,InSd32xIndice]yBl
+SQLiteColunaTipo[@Consulta,@Indice]
+CompararIgualxyInSd32x@ULTIMOy@SQLITE_NULO
+Retornarx@ULTIMO
+FimFuncao

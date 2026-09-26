@@ -29,7 +29,7 @@ function command(bin, args, options = {}) {
   return result;
 }
 
-function execute(source, { input = '', optimize = '-O0', file = 'case.tom', modules = {}, assets, environment = {}, events, snapshot, maximumLiveObjects = 0, nativeSources = [], linkFlags = [] } = {}) {
+function execute(source, { input = '', optimize = '-O0', file = 'case.tom', modules = {}, assets, environment = {}, events, snapshot, maximumLiveObjects = 0, nativeSources = [], linkFlags = [], isolatedCwd = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tom-test-'));
   try {
     const ir = path.join(dir, 'case.ll');
@@ -55,7 +55,7 @@ function execute(source, { input = '', optimize = '-O0', file = 'case.tom', modu
       fs.writeFileSync(env.TOM_UI_EVENTS, events);
       if (snapshot) env.TOM_UI_SNAPSHOT = snapshot;
     }
-    const result = spawnSync(binary, [], { encoding: 'utf8', timeout: 15000, input, env });
+    const result = spawnSync(binary, [], { encoding: 'utf8', timeout: 15000, input, env, ...(isolatedCwd ? {cwd:dir} : {}) });
     assert.ifError(result.error);
     assert.equal(result.signal, null);
     return { ...result, stdout: result.stdout.replace(/\r\n/g, '\n'), trace: events !== undefined && fs.existsSync(env.TOM_UI_TRACE) ? fs.readFileSync(env.TOM_UI_TRACE, 'utf8') : '' };

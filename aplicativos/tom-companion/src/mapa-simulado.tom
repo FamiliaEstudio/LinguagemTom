@@ -1,0 +1,84 @@
+// Demonstração sem editor, analisador ou canal: somente bibliotecas Tom.
+Importar[l'tom/grafos']
+Importar[l'tom/teclado']
+DefRecursoxJyJanelaCriar[l'Tom — grafo com dados simulados',900,760]
+JanelaEventosPonteiro[@J,Verdadeiro]
+JanelaEventosRolagem[@J,Verdadeiro]
+DefRecursoxEyEventoCriar[]
+DefRecursoxFyFonteCarregarArquivo[l'tom/DejaVuSansMono.ttf',14]
+DefRecursoxCatalogoyCatalogoVisualCriar[@J,16]
+DefArraySoAxNosxGrafoNox8
+DefArraySoAxArestasxGrafoArestax8
+ChamarxCanvasCriar[]
+DefVarRegistro<CanvasCamera>xCameray@ULTIMO
+ParaxI[1,7,1]
+SubtrxyInSd64x@Iy1
+ChamarxGrafoInserirNo[@Nos,@I,@ULTIMO,4,0,0]
+FimPara
+CatalogoVisualTexto[@Catalogo,@F,l'A: inicial 0.1']
+SetVarInSd64xNos@0.visualy@ULTIMO
+CatalogoVisualTexto[@Catalogo,@F,l'B: inicial 0.2']
+SetVarInSd64xNos@1.visualy@ULTIMO
+CatalogoVisualTexto[@Catalogo,@F,l'Soma']
+SetVarInSd64xNos@2.visualy@ULTIMO
+CatalogoVisualTexto[@Catalogo,@F,l'@ULTIMO da soma']
+SetVarInSd64xNos@3.visualy@ULTIMO
+CatalogoVisualTexto[@Catalogo,@F,l'Resultado']
+SetVarInSd64xNos@4.visualy@ULTIMO
+CatalogoVisualTexto[@Catalogo,@F,l'Saida: buffer']
+SetVarInSd64xNos@5.visualy@ULTIMO
+ChamarxGrafoInserirAresta[@Nos,@Arestas,1,1,3,4,0]
+ChamarxGrafoInserirAresta[@Nos,@Arestas,2,2,3,4,0]
+ChamarxGrafoInserirAresta[@Nos,@Arestas,3,3,4,9,0]
+ChamarxGrafoInserirAresta[@Nos,@Arestas,4,4,5,10,0]
+ChamarxGrafoInserirAresta[@Nos,@Arestas,5,5,6,5,0]
+ChamarxGrafoMover[@Nos,1,60.0,120.0,0,Verdadeiro,Verdadeiro]
+ChamarxGrafoMover[@Nos,2,60.0,230.0,0,Verdadeiro,Verdadeiro]
+ChamarxGrafoMover[@Nos,3,320.0,175.0,0,Verdadeiro,Verdadeiro]
+ChamarxGrafoMover[@Nos,4,580.0,175.0,0,Verdadeiro,Verdadeiro]
+ChamarxGrafoMover[@Nos,5,580.0,350.0,0,Verdadeiro,Verdadeiro]
+ChamarxGrafoMover[@Nos,6,320.0,350.0,0,Verdadeiro,Verdadeiro]
+DefVarBlxAtivoyVerdadeiro
+Enquantox@Ativo
+JanelaLimpar[@J,4042457087]
+DesenharTexto[@J,@F,l'Grafo simulado: roda amplia; arraste o fundo; clique seleciona.',16,32,640497663]
+ChamarxGrafoDesenhar[@J,@Catalogo,@Nos,@Arestas,@Camera,900,624]
+JanelaApresentar[@J]
+EventoAguardar[@J,@E]
+EventoCampo[@E,0]
+DefVarInSd32xTipoy@ULTIMO
+EventoCampoFl64[@E,1]
+DefVarFl64xXy@ULTIMO
+EventoCampoFl64[@E,2]
+DefVarFl64xYy@ULTIMO
+CompararIgualxyInSd32x@Tipoy@EVENTO_FECHAR
+Sex@ULTIMO
+SetVarBlxAtivoyFalso
+FimSe
+CompararIgualxyInSd32x@Tipoy@EVENTO_ROLAGEM
+Sex@ULTIMO
+EventoCampoFl64[@E,13]
+PotenciaFl64[1.15,@ULTIMO]
+ChamarxCanvasZoom[@Camera,@ULTIMO,@X,@Y]
+FimSe
+CompararIgualxyInSd32x@Tipoy@EVENTO_MOUSE
+Sex@ULTIMO
+ChamarxCanvasConteudoX[@Camera,@X]
+DefVarFl64xCXy@ULTIMO
+ChamarxCanvasConteudoY[@Camera,@Y]
+ChamarxGrafoSobPonteiro[@Nos,@CX,@ULTIMO]
+ChamarxGrafoSelecionar[@Nos,@Arestas,@ULTIMO]
+ChamarxCanvasArrasteIniciar[@Camera,@X,@Y]
+FimSe
+CompararIgualxyInSd32x@Tipoy@EVENTO_MOUSE_MOVER
+Sex@ULTIMO
+ChamarxCanvasArrasteMover[@Camera,@X,@Y]
+FimSe
+CompararIgualxyInSd32x@Tipoy@EVENTO_MOUSE_SOLTAR
+DefVarBlxSoltouy@ULTIMO
+CompararIgualxyInSd32x@Tipoy@EVENTO_PERDER_FOCO
+OuxyBlx@Soltouy@ULTIMO
+Sex@ULTIMO
+ChamarxCanvasArrasteTerminar[@Camera]
+FimSe
+FimEnquanto

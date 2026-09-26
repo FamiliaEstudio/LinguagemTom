@@ -17,6 +17,13 @@ const returns = body => body.some(node => node.kind === 'return' || node.kind ==
 class Emitter extends ScalarEmitter {
   constructor(module, fn = null) {
     super(); this.module = module; this.fn = fn;
+    if (module.observer) for (const field of ['lastNumeric', 'lastText']) {
+      let value = this[field];
+      Object.defineProperty(this, field, { get: () => value, set: next => {
+        value = next;
+        this[field + 'Origin'] = next === null ? null : this.currentNode?.location || null;
+      } });
+    }
     this.globals = module.globals; this.strings = module.strings; this.declarations = module.declarations;
     this.symbols = new Map(module.symbols);
     this.err = fn ? '%error' : this.allocate('%TomError');
@@ -24,6 +31,10 @@ class Emitter extends ScalarEmitter {
     this.terminated = false; this.cleanupNext = null; this.errorBindings = [];
   }
   fresh(prefix = 'v') { return `${prefix}${this.module ? ++this.module.id : ++this.id}`; }
+  define(name, value, location) {
+    super.define(name, value, location);
+    this.module.observer?.define(value, name, location, this.fn, this.currentNode);
+  }
   branch(label) { this.instruction(`br label %${label}`); this.terminated = true; }
   label(name) { super.label(name); this.terminated = false; }
   invalidate() { this.lastNumeric = null; this.lastText = null; }
@@ -62,6 +73,7 @@ class Emitter extends ScalarEmitter {
     return { type: typeOf('Dc34'), value: this.handle(slot), constant: value };
   }
   operand(raw, type, loc) {
+    if (raw === '@ULTIMO') this.module.observer?.last(loc, this.lastNumericOrigin, this.lastNumeric?.type.name, 'numeric');
     if (type.kind === 'record') {
       if (raw === 'Padrao') return this.recordDefault(type, loc);
       if (raw === '@ULTIMO') {
@@ -138,15 +150,36 @@ class Emitter extends ScalarEmitter {
     }
   }
   textOperand(raw, loc) {
+    if (raw === '@ULTIMO') this.module.observer?.last(loc, this.lastTextOrigin, this.lastText === null ? null : 'Txt', 'text');
     const match = /^l'((?:\\.|[^'\\])*)'$/.exec(raw);
     if (match) return this.globalString(decodeString(match[1], loc));
     if (raw === '@ULTIMO' && this.lastText !== null) return typeof this.lastText === 'string' ? this.globalString(this.lastText) : this.lastText.value;
     const symbol = this.lookup(raw.replace(/^@/, ''), loc);
     if (symbol.kind === 'text') return this.globalString(symbol.text);
-    if (symbol.kind === 'textview') return symbol.value;
-    if (symbol.kind !== 'buffer') fail('E_TYPE', 'Esperado texto ou buffer.', loc);
+    if (symbol.kind === 'textview') {
+      this.module.requirements.add('text');
+      this.declarations.add('declare ptr @tom_text_view_data(ptr)');
+      return this.value(`call ptr @tom_text_view_data(ptr ${symbol.value})`);
+    }
+    if (symbol.kind !== 'buffer' && symbol.type?.name !== 'Texto') fail('E_TYPE', 'Esperado texto ou buffer.', loc);
+    this.module.requirements.add('text');
     this.declarations.add('declare ptr @tom_text_data(ptr)');
     return this.value(`call ptr @tom_text_data(ptr ${this.handle(symbol.ptr)})`);
+  }
+  // User functions borrow a descriptor, not a pointer invalidated by realloc.
+  // Native builtins still receive a C string resolved just before their call.
+  textView(raw, loc) {
+    let text='null', literal='null';
+    if (raw.startsWith('@') && raw !== '@ULTIMO') {
+      const symbol=this.lookup(raw.slice(1),loc);
+      if (symbol.kind === 'textview') return symbol.value;
+      if (symbol.kind === 'buffer' || symbol.type?.name === 'Texto') text=this.handle(symbol.ptr);
+    }
+    if (text === 'null') literal=this.textOperand(raw,loc);
+    const view=this.allocate('{ ptr, ptr }');
+    this.instruction(`store ptr ${literal}, ptr ${view}`);
+    this.instruction(`store ptr ${text}, ptr ${this.value(`getelementptr { ptr, ptr }, ptr ${view}, i32 0, i32 1`)}`);
+    return view;
   }
   printPointer(pointer) {
     this.declarations.add('declare i32 @printf(ptr, ...)');
@@ -172,7 +205,7 @@ class Emitter extends ScalarEmitter {
     if (resources[expected.replace(/^Ref/, '')] || /^(?:Ref)?Buffer$/.test(expected) || /^FB\d+C$/.test(expected)) {
       if (!raw.startsWith('@')) fail('E_ARGUMENT', 'Recurso exige @nome.', loc);
       const symbol = this.lookup(raw.slice(1), loc), buffer = expected.includes('Buffer') || expected.startsWith('FB');
-      if (buffer ? symbol.kind !== 'buffer' : symbol.type?.name !== expected.replace(/^Ref/, '')) fail('E_TYPE', `Esperado ${expected}.`, loc);
+      if (buffer ? (symbol.kind !== 'buffer' && symbol.type?.name !== 'Texto') : symbol.type?.name !== expected.replace(/^Ref/, '')) fail('E_TYPE', `Esperado ${expected}.`, loc);
       if (expected.startsWith('FB') && symbol.type.name !== expected) fail('E_TYPE', `Esperado ${expected}.`, loc);
       if ((mutable || expected.startsWith('Ref')) && symbol.mutable === false) fail('E_BORROW', 'Parâmetro somente leitura; declare Ref para alterá-lo.', loc);
       return ptr(this.handle(symbol.ptr));
@@ -205,6 +238,10 @@ class Emitter extends ScalarEmitter {
     }
   }
   emit(node) {
+    const previous = this.currentNode; this.currentNode = node;
+    try { return this.emitNode(node); } finally { this.currentNode = previous; }
+  }
+  emitNode(node) {
     const loc = node.location;
     switch (node.kind) {
       case 'function': return;
@@ -338,6 +375,7 @@ class Emitter extends ScalarEmitter {
       }
       case 'printName': this.printPointer(this.textOperand('@' + node.name, loc)); return;
       case 'printLast':
+        this.module.observer?.last(loc, this.lastTextOrigin, this.lastText === null ? null : 'Txt', 'text');
         if (this.lastText === null) fail('E_ULTIMO', 'GerarTxtUltimo sem texto garantido.', loc);
         this.printPointer(typeof this.lastText === 'string' ? this.globalString(this.lastText) : this.lastText.value); return;
       case 'builtin': this.builtin(node); return;
@@ -348,7 +386,8 @@ class Emitter extends ScalarEmitter {
         if (node.args.length !== fn.params.length) fail('E_ARGUMENT', `Função '${node.name}' exige ${fn.params.length} argumentos.`, loc);
         const args = [ptr(this.err)]; let slot, type;
         if (fn.result !== 'Vazio') { type = this.resolved(fn.result); slot = type.kind === 'record' ? this.recordOwned(type) : type.kind === 'decimal' ? this.owned('Dc34') : this.allocate(type.llvm); args.push(ptr(slot)); }
-        args.push(...node.args.map((raw, i) => this.argument(raw, fn.params[i].type.name, loc, fn.params[i].mutable)));
+        args.push(...node.args.map((raw, i) => fn.params[i].type.name === 'Txt'
+          ? ptr(this.textView(raw,loc)) : this.argument(raw, fn.params[i].type.name, loc, fn.params[i].mutable)));
         this.instruction(`call void @tom_fn_${node.name}(${args.map(x => `${x.type} ${x.value}`).join(', ')})`);
         const bad = this.fresh('call_error'), good = this.fresh('call_ok'), failed = this.value(`icmp ne i32 ${this.errorCode()}, 0`);
         this.instruction(`br i1 ${failed}, label %${bad}, label %${good}`); this.label(bad); this.errorBranch(); this.label(good); this.invalidate();
@@ -431,30 +470,13 @@ class Emitter extends ScalarEmitter {
 }
 Object.assign(Emitter.prototype, records.methods);
 
-function emitProgram(ast) {
-  const module = { globals: [], strings: new Map(), declarations: new Set(), requirements: new Set(), functions: new Map(), symbols: new Map(), types: records.resolveTypes(ast), id: 0, needsInput: false };
+function emitProgram(ast, observer = null, semantic = require('./semantic').checkProgram(ast)) {
+  const module = { observer, semantic, globals: [], strings: new Map(), declarations: new Set(), requirements: new Set(), functions: new Map(), symbols: new Map(), types: semantic.types, id: 0, needsInput: false };
   for (const type of module.types.values()) if (type.kind === 'record') module.globals.push(`${type.storage} = type { ${type.properties.map(p => p.type.storage || p.type.llvm).join(', ')} }`);
   for (const node of [...ast.body.filter(x => ['enum', 'record', 'struct'].includes(x.kind)), ...ast.body.filter(x => x.kind === 'constant')]) {
     const setup = new Emitter(module); setup.emit(node); module.symbols = setup.symbols;
   }
-  for (const fn of ast.body.filter(x => x.kind === 'function')) {
-    if (module.functions.has(fn.name)) fail('E_DUPLICATE', `Função '${fn.name}' duplicada.`, fn.location);
-    module.functions.set(fn.name, fn);
-  }
-  const calls = node => [...(node.kind === 'call' ? [node] : []), ...(node.child ? calls(node.child) : []), ...['body', 'otherwise', 'handler'].flatMap(key => (node[key] || []).flatMap(calls))];
-  const visited = new Set(), active = new Set();
-  function visit(fn) {
-    if (active.has(fn.name)) fail('E_RECURSION', 'Recursão não é suportada.', fn.location);
-    if (visited.has(fn.name)) return;
-    active.add(fn.name);
-    for (const call of calls(fn)) {
-      const child = module.functions.get(call.name);
-      if (!child) fail('E_FUNCTION', `Função '${call.name}' não existe.`, call.location);
-      visit(child);
-    }
-    active.delete(fn.name); visited.add(fn.name);
-  }
-  for (const fn of module.functions.values()) visit(fn);
+  module.functions=semantic.functions;
   const functions = [...module.functions.values()].map(fn => new Emitter(module, fn).renderFunction(fn.body));
   functions.push(new Emitter(module).renderFunction(ast.body.filter(x => !['function', 'struct', 'constant', 'enum', 'record'].includes(x.kind))));
   let helpers = '';

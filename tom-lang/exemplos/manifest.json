@@ -159,5 +159,39 @@
     "stdin": "",
     "stdout": "",
     "exitCode": 0
+  },
+  {
+    "file": "scriptorium/acervo.tom",
+    "status": "supported",
+    "stdin": "",
+    "stdout": "Scriptorium: cadastro, edição, filtros, FTS5, rollback e backup verificados.\nTexto recuperado: 1024000 caracteres.\n",
+    "exitCode": 0,
+    "isolatedCwd": true
+  },
+  {
+    "file": "../stdlib/sqlite.tom",
+    "status": "library"
+  },
+  {
+    "file": "editor/editor.tom",
+    "status": "supported",
+    "gui": true,
+    "events": "quit\n",
+    "stdin": "",
+    "stdout": "Editor encerrado.\n",
+    "exitCode": 0,
+    "isolatedCwd": true
+  },
+  {
+    "file": "editor/oficina.tom",
+    "status": "library"
+  },
+  {
+    "file": "../stdlib/editor.tom",
+    "status": "library"
+  },
+  {
+    "file": "../stdlib/editor_sqlite.tom",
+    "status": "library"
   }
 ]

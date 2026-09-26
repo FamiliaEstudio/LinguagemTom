@@ -1,0 +1,100 @@
+Importar[l'./modelo.tom']
+DefFuncaoxCompanionExplicar[JsonxDados,RefFB65536CxSaida]yVazio
+CopiarTxt[@Saida,l'Selecione uma instrução no VS Code para entender seu papel na calculadora.']
+JsonExiste[@Dados,l'/analysis/instruction']
+NaoBlx@ULTIMO
+Sex@ULTIMO
+Retornar
+FimSe
+DefStkFB256CxCaminhoyl''
+DefStkFB128CxNomeyl''
+LimparTxt[@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/notice',l'',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/text',l'CÓDIGO: ',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/command',l'COMANDO: ',@Saida]
+JsonObterTexto[@Dados,l'/analysis/instruction/kind',@Nome]
+CopiarTxt[@Caminho,l'/course/explanations/kinds/']
+AnexarTxt[@Caminho,@Nome]
+ChamarxCompanionCampo[@Dados,@Caminho,l'\n',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/type',l'TIPO: ',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/name',l'NOME: ',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/op',l'OPERAÇÃO: ',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/operand',l'VALOR: ',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/literal',l'TEXTO INICIAL: ',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/left',l'OPERANDO X: ',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/right',l'OPERANDO Y: ',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/condition',l'CONDIÇÃO: ',@Saida]
+ChamarxCompanionCampo[@Dados,l'/analysis/instruction/result',l'RESULTADO: ',@Saida]
+JsonExiste[@Dados,l'/analysis/instruction/name']
+Sex@ULTIMO
+JsonObterTexto[@Dados,l'/analysis/instruction/name',@Nome]
+CopiarTxt[@Caminho,l'/course/explanations/builtins/']
+AnexarTxt[@Caminho,@Nome]
+ChamarxCompanionCampo[@Dados,@Caminho,l'OPERAÇÃO: ',@Saida]
+CopiarTxt[@Caminho,l'/course/explanations/variables/']
+AnexarTxt[@Caminho,@Nome]
+ChamarxCompanionCampo[@Dados,@Caminho,l'PAPEL NA REFERÊNCIA: ',@Saida]
+CopiarTxt[@Caminho,l'/course/explanations/functions/']
+AnexarTxt[@Caminho,@Nome]
+ChamarxCompanionCampo[@Dados,@Caminho,l'FUNÇÃO NA REFERÊNCIA: ',@Saida]
+FimSe
+JsonExiste[@Dados,l'/analysis/instruction/builtin']
+Sex@ULTIMO
+JsonObterTexto[@Dados,l'/analysis/instruction/builtin',@Nome]
+CopiarTxt[@Caminho,l'/course/explanations/builtins/']
+AnexarTxt[@Caminho,@Nome]
+ChamarxCompanionCampo[@Dados,@Caminho,l'CRIAÇÃO: ',@Saida]
+FimSe
+JsonExiste[@Dados,l'/analysis/instruction/owner']
+Sex@ULTIMO
+JsonTipo[@Dados,l'/analysis/instruction/owner']
+CompararIgualxyInSd32x@ULTIMOy3
+Sex@ULTIMO
+JsonObterTexto[@Dados,l'/analysis/instruction/owner',@Nome]
+CopiarTxt[@Caminho,l'/course/explanations/functions/']
+AnexarTxt[@Caminho,@Nome]
+ChamarxCompanionCampo[@Dados,@Caminho,l'CONTEXTO: ',@Saida]
+FimSe
+FimSe
+JsonExiste[@Dados,l'/analysis/instruction/args']
+Sex@ULTIMO
+JsonComprimento[@Dados,l'/analysis/instruction/args']
+DefVarInSd64xArgumentosy@ULTIMO
+ParaxI[0,@Argumentos,1]
+ChamarxCompanionCaminho[@I,l'/analysis/instruction/args/',l'',@Caminho]
+ChamarxCompanionCampo[@Dados,@Caminho,l'ARGUMENTO: ',@Saida]
+ChamarxCompanionCaminho[@I,l'/analysis/parameters/',l'/name',@Caminho]
+ChamarxCompanionCampo[@Dados,@Caminho,l'  RECEBIDO COMO: ',@Saida]
+ChamarxCompanionCaminho[@I,l'/analysis/parameters/',l'/type',@Caminho]
+ChamarxCompanionCampo[@Dados,@Caminho,l'  TIPO ESPERADO: ',@Saida]
+FimPara
+FimSe
+JsonExiste[@Dados,l'/analysis/last']
+Sex@ULTIMO
+JsonComprimento[@Dados,l'/analysis/last']
+DefVarInSd64xResultadosy@ULTIMO
+ParaxI[0,@Resultados,1]
+ChamarxCompanionCaminho[@I,l'/analysis/last/',l'/resolved',@Caminho]
+JsonObterBl[@Dados,@Caminho]
+Sex@ULTIMO
+ChamarxCompanionCaminho[@I,l'/analysis/last/',l'/producerLine',@Caminho]
+JsonObterInSd64[@Dados,@Caminho]
+DefStkFB32CxLinhayl''
+InSd64ParaTexto[@ULTIMO,@Linha]
+AnexarTxt[@Saida,l'@ULTIMO vem da instrução da linha ']
+AnexarTxt[@Saida,@Linha]
+AnexarTxt[@Saida,l'. Esta é uma relação estática; o valor depende da execução.\n']
+Senao
+AnexarTxt[@Saida,l'@ULTIMO ainda não tem um produtor válido resolvido neste ponto.\n']
+FimSe
+FimPara
+FimSe
+JsonExiste[@Dados,l'/analysis/diagnostic/code']
+Sex@ULTIMO
+JsonObterTexto[@Dados,l'/analysis/diagnostic/code',@Nome]
+CopiarTxt[@Caminho,l'/course/explanations/errors/']
+AnexarTxt[@Caminho,@Nome]
+ChamarxCompanionCampo[@Dados,l'/analysis/diagnostic/message',l'DIAGNÓSTICO: ',@Saida]
+ChamarxCompanionCampo[@Dados,@Caminho,l'COMO INVESTIGAR: ',@Saida]
+FimSe
+FimFuncao

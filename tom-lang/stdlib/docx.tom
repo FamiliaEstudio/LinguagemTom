@@ -1,0 +1,3 @@
+Importar[l'tom/editor']
+Importar[l'tom/arquivos']
+// DocxImportar preserva o destino em falhas de leitura; o relatório explica perdas.

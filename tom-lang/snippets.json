@@ -305,5 +305,106 @@
       "DefVarFl64x${6:Valor}y@ULTIMO"
     ],
     "description": "Curva calculada pelo horário, independente dos quadros apresentados."
+  },
+  "Canal local de mensagens": {
+    "prefix": "CanalMensagensAbrir",
+    "body": [
+      "DefRecursox${1:Canal}yCanalMensagensAbrir[1048576,8]",
+      "DefStkFB1048577Cx${2:Mensagem}yl''",
+      "CanalMensagensConsultar[@${1:Canal},@${2:Mensagem}]",
+      "Sex@ULTIMO",
+      "CanalMensagensEnviar[@${1:Canal},@${2:Mensagem}]",
+      "FimSe"
+    ],
+    "description": "Consulta sem bloquear; envia UTF-8 por pipes locais. O processo pai fornece stdin/stdout."
+  },
+  "RaizQuadradaFl64": {
+    "prefix": "RaizQuadradaFl64",
+    "body": [
+      "RaizQuadradaFl64[${1:9.0}]"
+    ],
+    "description": "Raiz real verificada; negativos lançam erro Tom."
+  },
+  "HipotenusaFl64": {
+    "prefix": "HipotenusaFl64",
+    "body": [
+      "HipotenusaFl64[${1:3.0},${2:4.0}]"
+    ],
+    "description": "Distância estável com verificação de valores finitos."
+  },
+  "JanelaEventosRolagem": {
+    "prefix": "JanelaEventosRolagem",
+    "body": [
+      "JanelaEventosRolagem[@${1:Janela},Verdadeiro]"
+    ],
+    "description": "Ativa rolagem precisa nesta janela."
+  },
+  "EventoCampoFl64": {
+    "prefix": "EventoCampoFl64",
+    "body": [
+      "EventoCampoFl64[@${1:Evento},${2|1,2,12,13|}]"
+    ],
+    "description": "Ponteiro X/Y ou rolagem X/Y em coordenadas lógicas Fl64."
+  },
+  "Canvas e câmera": {
+    "prefix": "CanvasCriar",
+    "body": [
+      "Importar[l'tom/canvas']",
+      "ChamarxCanvasCriar[]",
+      "DefVarRegistro<CanvasCamera>x${1:Camera}y@ULTIMO"
+    ],
+    "description": "Câmera independente do relógio e do compilador."
+  },
+  "Texto dinâmico": {
+    "prefix": "TextoCriar",
+    "body": [
+      "DefRecursox${1:Texto}yTextoCriar[l'${2:}',67108864]"
+    ],
+    "description": "Texto UTF-8 com crescimento automático até o limite, incluindo NUL."
+  },
+  "SQLite banco e consulta": {
+    "prefix": "SQLiteAbrir",
+    "body": [
+      "Importar[l'tom/sqlite']",
+      "DefRecursox${1:Banco}ySQLiteAbrir[l'${2:acervo.sqlite}']",
+      "DefRecursox${3:Consulta}ySQLitePreparar[@${1:Banco},l'SELECT ?1']",
+      "SQLiteVincularTexto[@${3:Consulta},1,l'${4:Olá}']",
+      "SQLiteAvancar[@${3:Consulta}]",
+      "Sex@ULTIMO",
+      "DefRecursox${5:Resultado}yTextoCriar[l'',67108864]",
+      "SQLiteColunaTexto[@${3:Consulta},0,@${5:Resultado}]",
+      "GerarTxtx${5:Resultado}",
+      "FimSe"
+    ],
+    "description": "Consulta parametrizada com resultado UTF-8 e limpeza automática."
+  },
+  "Documento com histórico": {
+    "prefix": "DocumentoCriar",
+    "body": [
+      "DefRecursox${1:Documento}yDocumentoCriar[l'${2:}',67108864,134217728]"
+    ],
+    "description": "Documento UTF-8 com seleção por grafemas, estilos e histórico limitado."
+  },
+  "Editor reutilizável": {
+    "prefix": "EditorCriar",
+    "body": [
+      "Importar[l'tom/editor']",
+      "DefRecursox${1:Janela}yJanelaCriar[l'Editor',960,720]",
+      "DefRecursox${2:Fonte}yFonteCarregar[12]",
+      "DefRecursox${3:Documento}yDocumentoCriar[l'',67108864,134217728]",
+      "DefRecursox${4:Editor}yEditorCriar[@${1:Janela},@${3:Documento},@${2:Fonte}]",
+      "EditorArea[@${4:Editor},24,24,912,672]",
+      "EditorFoco[@${4:Editor},Verdadeiro]"
+    ],
+    "description": "Apresentação SDL reutilizável, com fontes privadas e documento independente."
+  },
+  "Persistência do documento": {
+    "prefix": "PersistenciaDocumentoAbrir",
+    "body": [
+      "Importar[l'tom/editor_sqlite']",
+      "DefRecursox${1:Documento}yDocumentoCriar[l'',67108864,134217728]",
+      "DefRecursox${2:Armazenamento}yPersistenciaDocumentoAbrir[l'${3:documentos.sqlite}',1,@${1:Documento}]"
+    ],
+    "description": "Abre a versão confirmada; consulte a recuperação pendente antes de gravar."
   }
 }

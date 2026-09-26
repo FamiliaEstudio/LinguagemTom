@@ -23,7 +23,7 @@ for (const example of manifest) {
       assert.equal(result.success,true,JSON.stringify(result.diagnostics));
     } else {
       for (const optimize of ['-O0', '-O2']) {
-        const result = execute(source, { file, modules:loadModules(source,file), assets:example.assets ? path.resolve(path.dirname(file),example.assets) : undefined, input: example.stdin, optimize, events: example.events, environment: example.gui ? { SDL_VIDEODRIVER: "dummy", SDL_RENDER_DRIVER: "software", SDL_AUDIODRIVER: "dummy" } : {} });
+        const result = execute(source, { file, modules:loadModules(source,file), assets:example.assets ? path.resolve(path.dirname(file),example.assets) : undefined, input: example.stdin, optimize, events: example.events, isolatedCwd:example.isolatedCwd, environment: example.gui ? { SDL_VIDEODRIVER: "dummy", SDL_RENDER_DRIVER: "software", SDL_AUDIODRIVER: "dummy" } : {} });
         assert.equal(result.status, example.exitCode, result.stdout + result.stderr);
         assert.equal(result.stdout, example.stdout);
       }
@@ -34,7 +34,7 @@ for (const example of manifest) {
 test('every checked-in example is classified', () => {
   const root = path.resolve(__dirname, '..');
   const classified = new Set(manifest.map(x => path.resolve(root, 'exemplos', x.file)));
-  for (const directory of [root, path.join(root, 'exemplos'), path.join(root, 'exemplos/multimedia'), path.join(root, 'exemplos/estado'), path.join(root, 'experimental/examples')]) {
+  for (const directory of [root, path.join(root, 'exemplos'), path.join(root, 'exemplos/multimedia'), path.join(root, 'exemplos/estado'), path.join(root, 'exemplos/scriptorium'), path.join(root, 'exemplos/editor'), path.join(root, 'experimental/examples')]) {
     for (const name of fs.readdirSync(directory).filter(x => x.endsWith('.tom'))) {
       assert.ok(classified.has(path.join(directory, name)), `Classifique ${name} em exemplos/manifest.json.`);
     }

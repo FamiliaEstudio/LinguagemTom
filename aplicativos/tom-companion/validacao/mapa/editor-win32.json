@@ -1,0 +1,17 @@
+{
+  "platform": "win32",
+  "automaticInstallation": true,
+  "activeCalculator": true,
+  "singleWindow": true,
+  "copyCode": true,
+  "unsaved": true,
+  "undoRedo": true,
+  "selection": true,
+  "navigation": true,
+  "verified": true,
+  "sourcePreserved": true,
+  "codeMap": true,
+  "unsavedModules": true,
+  "stableGraphIds": true,
+  "graphNavigation": true
+}

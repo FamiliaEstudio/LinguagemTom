@@ -99,3 +99,16 @@ test('0.4 nominal declarations, nested properties and range indices retain disti
   has('SOAComprimento[@Itens]', 'SOAComprimento', 'keyword.control.tom');
   has("JsonObterInSd64[@J,l'/origemNs']", 'JsonObterInSd64', 'support.function.tom');
 });
+
+test('dynamic text and SQLite types and operations have stable scopes',()=>{
+  has('DefFuncaoxSalvar[RefTextoxTexto,RefBancoSQLitexBanco]yVazio','Texto','support.type.tom');
+  has('DefFuncaoxSalvar[RefTextoxTexto,RefBancoSQLitexBanco]yVazio','BancoSQLite','support.type.tom');
+  has("DefRecursoxDyTextoCriar[l'',67108864]",'TextoCriar','support.function.tom');
+  has('SQLiteVincularTexto[@Consulta,1,@Texto]','SQLiteVincularTexto','support.function.tom');
+  has('SubstituirTrechoTxt[@Texto,0,2,l\'Olá\']','SubstituirTrechoTxt','support.function.tom');
+});
+
+test('document editor and asynchronous persistence types have stable scopes',()=>{
+  for(const type of ['DocumentoTexto','EditorTexto','PersistenciaDocumentoSQLite'])has(`DefFuncaoxUsar[Ref${type}xRecurso]yVazio`,type,'support.type.tom');
+  for(const name of ['DocumentoSelecionar','EditorProcessarEvento','PersistenciaSolicitar'])has(`${name}[@Recurso,1]`,name,'support.function.tom');
+});

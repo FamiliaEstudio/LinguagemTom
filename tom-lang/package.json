@@ -1,6 +1,11 @@
 {
   "name": "tom-lang",
   "displayName": "Linguagem Tom",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FamiliaEstudio/LinguagemTom.git",
+    "directory": "tom-lang"
+  },
   "version": "0.4.0",
   "engines": {
     "vscode": "^1.70.0",
@@ -36,11 +41,142 @@
         "language": "tom",
         "path": "./snippets.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "tom.companion.start",
+        "title": "Abrir Tom Companion",
+        "icon": "$(open-preview)",
+        "category": "Tom"
+      },
+      {
+        "command": "tom.companion.chooseProject",
+        "title": "Companion: escolher pasta da calculadora",
+        "category": "Tom"
+      },
+      {
+        "command": "tom.companion.copyCode",
+        "title": "Companion: copiar código do passo",
+        "category": "Tom"
+      },
+      {
+        "command": "tom.companion.explain",
+        "title": "Companion: explicar seleção",
+        "category": "Tom"
+      },
+      {
+        "command": "tom.companion.verify",
+        "title": "Companion: verificar passo",
+        "category": "Tom"
+      },
+      {
+        "command": "tom.companion.run",
+        "title": "Companion: executar calculadora",
+        "category": "Tom"
+      },
+      {
+        "command": "tom.companion.stop",
+        "title": "Companion: interromper execução",
+        "category": "Tom"
+      },
+      {
+        "command": "tom.companion.build",
+        "title": "Companion: gerar pacote",
+        "category": "Tom"
+      },
+      {
+        "command": "tom.companion.map",
+        "title": "Tom: Abrir mapa do código no Companion",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "tom.companion.close",
+        "title": "Encerrar Tom Companion",
+        "category": "Tom"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "tom.companion.start",
+          "when": "resourceLangId == tom",
+          "group": "navigation@1"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "tom.companion.start",
+        "key": "ctrl+alt+shift+t",
+        "mac": "cmd+alt+shift+t",
+        "when": "editorLangId == tom"
+      }
+    ],
+    "configuration": {
+      "title": "Tom Companion",
+      "properties": {
+        "tom.companion.installation": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Pasta extraída do Companion que contém companion-install.json. Vazio detecta o repositório, inclusive a partir de subpastas, ou reutiliza a última instalação."
+        },
+        "tom.companion.toolchain": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Pasta .tools/linux ou .tools/windows com Node 24, LLVM e o runtime nativo. Vazio usa a instalação local detectada."
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "tom-companion",
+          "title": "Tom Companion",
+          "icon": "companion/media/tom.svg"
+        }
+      ],
+      "panel": [
+        {
+          "id": "tom-code-map",
+          "title": "Mapa do código",
+          "icon": "companion/media/tom.svg"
+        }
+      ]
+    },
+    "views": {
+      "tom-companion": [
+        {
+          "id": "tom.companion.view",
+          "name": "Acompanhamento",
+          "type": "webview"
+        }
+      ],
+      "tom-code-map": [
+        {
+          "id": "tom.companion.mapView",
+          "name": "Mapa do código",
+          "type": "webview"
+        }
+      ]
+    }
   },
   "main": "./extension.js",
   "activationEvents": [
-    "onLanguage:tom"
+    "onLanguage:tom",
+    "onCommand:tom.companion.start",
+    "onCommand:tom.companion.chooseProject",
+    "onCommand:tom.companion.copyCode",
+    "onCommand:tom.companion.explain",
+    "onCommand:tom.companion.verify",
+    "onCommand:tom.companion.run",
+    "onCommand:tom.companion.stop",
+    "onCommand:tom.companion.build",
+    "onCommand:tom.companion.map",
+    "onCommand:tom.companion.close",
+    "onView:tom.companion.view",
+    "onView:tom.companion.mapView"
   ],
   "description": "Tom 0.4: registros, enumerações, ações de entrada, JSON, interface e sessões reproduzíveis.",
   "scripts": {
@@ -60,12 +196,34 @@
     "test:audio-device": "node ../scripts/verify-audio-device.js",
     "test:state": "node ../scripts/verify-state.js",
     "musical": "node tomc.js --run --assets ../jogos/musical-tom/assets ../jogos/musical-tom/src/musical-tom.tom",
-    "test:musical": "node --test --test-concurrency=1 ../jogos/musical-tom/tests/*.test.js"
+    "test:musical": "node --test --test-concurrency=1 ../jogos/musical-tom/tests/*.test.js",
+    "companion": "node ../aplicativos/tom-companion/scripts/build.js",
+    "test:companion": "node --test --test-concurrency=1 ../aplicativos/tom-companion/tests/*.test.js",
+    "companion:map": "node ../aplicativos/tom-companion/scripts/build-map.js",
+    "test:scriptorium": "node --test --test-concurrency=1 tests/text-dynamic.test.js tests/sqlite.test.js tests/scriptorium-runtime.test.js",
+    "verify:scriptorium": "node ../scripts/verify-scriptorium.js",
+    "test:document-editor": "node --test --test-concurrency=1 tests/document.test.js tests/editor-runtime.test.js tests/editor-store.test.js",
+    "verify:document-editor": "node ../scripts/verify-editor.js",
+    "editor-demo": "node tomc.js --run exemplos/editor/editor.tom",
+    "test:scriptorium-app": "node --test --test-concurrency=1 ../aplicativos/scriptorium/tests/*.test.js",
+    "verify:scriptorium-app": "node ../aplicativos/scriptorium/scripts/verify-ui.js",
+    "package:scriptorium": "node ../aplicativos/scriptorium/scripts/package.js --zip",
+    "scriptorium": "node tomc.js --run ../aplicativos/scriptorium/src/scriptorium.tom"
   },
   "devDependencies": {
     "@vscode/vsce": "3.9.2",
     "vscode-oniguruma": "2.0.1",
     "vscode-textmate": "9.3.2"
   },
-  "publisher": "pipim-studios"
+  "publisher": "pipim-studios",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Realce e diagnósticos funcionam; o Companion só inicia processos em pastas confiáveis."
+    },
+    "virtualWorkspaces": false
+  }
 }

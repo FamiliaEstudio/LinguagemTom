@@ -5,7 +5,10 @@ const path = require('node:path');
 const { compileResolved } = require('./core/module-loader');
 const { normalize } = require('./core/modules');
 
+let activeCompanion;
 function activate(context) {
+  const companion = vscode.commands?.registerCommand ? require('./companion/extension').activate(vscode, context) : null;
+  if (companion) { activeCompanion=companion;context.subscriptions.push(companion); }
   const diagnostics = vscode.languages.createDiagnosticCollection('tom');
   let previous = new Set();
   const refresh = (documents = vscode.workspace.textDocuments) => {
@@ -15,6 +18,9 @@ function activate(context) {
     const groups = new Map(open.map(d => [normalize(d.fileName), { uri: d.uri, document: d, items: [] }]));
     const seen = new Set();
     for (const document of open) {
+      // Companion and map own diagnostics for watched buffers in Node workers.
+      // Do not generate LLVM synchronously again on each editor keystroke.
+      if (companion?.owns(document.fileName)) continue;
       const result = compileResolved(document.getText(), { file: document.fileName }, read);
       for (const item of result.diagnostics) {
         const name = item.file.startsWith('tom/') ? path.join(__dirname, 'stdlib', item.file.slice(4) + '.tom') : item.file;
@@ -47,5 +53,5 @@ function activate(context) {
   }
   refresh();
 }
-function deactivate() {}
+async function deactivate() { try { await activeCompanion?.shutdown(); } finally { activeCompanion?.dispose();activeCompanion=null; } }
 module.exports = { activate, deactivate };

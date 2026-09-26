@@ -3,7 +3,6 @@
 #include <stdlib.h>
 int32_t tom_require(int32_t condition) { return condition == 1 ? TOM_OK : TOM_INVALID; }
 int32_t tom_raise(int32_t code) { return code > TOM_OK && code <= TOM_LATE ? code : TOM_INVALID; }
-int32_t tom_i32_i64(int32_t value,int64_t *out) { if(!out)return TOM_INVALID;*out=value;return TOM_OK; }
 int32_t tom_u32_i64(uint32_t value,int64_t *out) { if(!out)return TOM_INVALID;*out=value;return TOM_OK; }
 int32_t tom_i64_u32(int64_t value,uint32_t *out) { if(!out)return TOM_INVALID;if(value<0||value>UINT32_MAX)return TOM_OVERFLOW;*out=(uint32_t)value;return TOM_OK; }
 int32_t tom_i64_i32(int64_t value,int32_t *out) { if(!out)return TOM_INVALID;if(value<INT32_MIN||value>INT32_MAX)return TOM_OVERFLOW;*out=(int32_t)value;return TOM_OK; }
@@ -34,6 +33,15 @@ int32_t tom_power_f64(double a, double b, double *out) {
   if (!isfinite(value)) return TOM_OVERFLOW;
   *out = value; return TOM_OK;
 }
+int32_t tom_sqrt_f64(double value, double *out) {
+  if (!out || !isfinite(value) || value < 0) return TOM_INVALID;
+  *out = sqrt(value); return TOM_OK;
+}
+int32_t tom_hypot_f64(double x, double y, double *out) {
+  if (!out || !isfinite(x) || !isfinite(y)) return TOM_INVALID;
+  double result = hypot(x,y); if (!isfinite(result)) return TOM_OVERFLOW;
+  *out = result; return TOM_OK;
+}
 
 /* PCG XSH RR 64/32. State and stream follow the public reference algorithm.
  * The arithmetic deliberately wraps unsigned integers; no host rand() state. */
@@ -57,3 +65,5 @@ int32_t tom_random_bounded(TomRandom *r, uint32_t bound, uint32_t *out) {
   do { value = next(r); } while (value < threshold);
   *out = value % bound; return TOM_OK;
 }
+
+int32_t tom_i32_i64(int32_t value,int64_t *out){if(!out)return TOM_INVALID;*out=value;return TOM_OK;}

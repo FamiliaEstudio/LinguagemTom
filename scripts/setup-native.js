@@ -5,6 +5,9 @@ const crypto = require('node:crypto');
 const { root, platform, toolchain, command } = require('../tom-lang/core/native-build');
 const { buildMpdecimal } = require('./build-mpdecimal');
 const { buildYyjson } = require('./build-yyjson');
+const { buildSqlite } = require('./build-sqlite');
+const { buildUtf8proc } = require('./build-utf8proc');
+const { buildDocx } = require('./build-docx');
 const config = require('./toolchain.json');
 const windows = process.platform === 'win32';
 const downloads = path.join(root, '.tools/downloads');
@@ -81,22 +84,30 @@ async function setupLinux() {
     '-DSDL_HAPTIC=OFF', '-DSDL_SENSOR=OFF', '-DSDL_HIDAPI=OFF', '-DSDL_WAYLAND=OFF', '-DSDL_X11=ON', '-DSDL_OPENGL=OFF',
     '-DSDL_OPENGLES=OFF', '-DSDL_VULKAN=OFF', '-DSDL_GPU=OFF', '-DSDL_DBUS=OFF', '-DSDL_IBUS=OFF', '-DSDL_X11_XSCRNSAVER=OFF', '-DSDL_X11_XTEST=OFF',
   ]);
+  const harfbuzzPackages=['libharfbuzz-dev','libharfbuzz0b','libglib2.0-0t64','libgraphite2-3','libpcre2-8-0'];
+  const hbDownloads=path.join(tools,'harfbuzz-packages');fs.mkdirSync(hbDownloads,{recursive:true});
+  if(!fs.existsSync(path.join(sysroot,'.tom-editor-harfbuzz'))) {
+    command('apt-get',['download',...harfbuzzPackages],{cwd:hbDownloads,timeout:600000});
+    const receipt=[];
+    for(const name of fs.readdirSync(hbDownloads).filter(x=>x.endsWith('.deb'))){const file=path.join(hbDownloads,name);command('dpkg-deb',['-x',file,sysroot]);receipt.push({file:name,sha256:hash(file)});}
+    fs.writeFileSync(path.join(sysroot,'.tom-editor-harfbuzz'),JSON.stringify(receipt,null,2));
+  }
   process.stdout.write('Building SDL_ttf for Linux...\n');
-  configure(path.join(sources, 'SDL3_ttf-3.2.2'), 'SDL3_ttf', ['-DBUILD_SHARED_LIBS=ON', '-DSDLTTF_VENDORED=OFF', '-DSDLTTF_HARFBUZZ=OFF', '-DSDLTTF_PLUTOSVG=OFF', '-DSDLTTF_SAMPLES=OFF',
+  configure(path.join(sources, 'SDL3_ttf-3.2.2'), 'SDL3_ttf', ['-DBUILD_SHARED_LIBS=ON', '-DSDLTTF_VENDORED=OFF', '-DSDLTTF_HARFBUZZ=ON', '-DSDLTTF_PLUTOSVG=OFF', '-DSDLTTF_SAMPLES=OFF',
     '-DFREETYPE_INCLUDE_DIR_freetype2=' + path.join(sysroot, 'usr/include/freetype2'),
     '-DFREETYPE_INCLUDE_DIR_ft2build=' + path.join(sysroot, 'usr/include/freetype2'),
     '-DFREETYPE_LIBRARY_RELEASE=' + path.join(sysroot, 'usr/lib/x86_64-linux-gnu/libfreetype.so'),
   ]);
   buildMpdecimal();
   const shared = path.join(sysroot, 'usr/lib/x86_64-linux-gnu');
-  for (const name of fs.readdirSync(shared)) if (/^lib(?:freetype|png16|z|bz2|brotli(?:dec|common))\.so(?:\.|$)/.test(name)) fs.copyFileSync(path.join(shared, name), path.join(native, 'lib', name));
+  for (const name of fs.readdirSync(shared)) if (/^lib(?:harfbuzz|glib-2\.0|graphite2|pcre2-8|freetype|png16|z|bz2|brotli(?:dec|common))\.so(?:\.|$)/.test(name)) fs.copyFileSync(path.join(shared, name), path.join(native, 'lib', name));
   const audioLibrary = /^lib(?:asound|pulse(?:common-[\d.]+)?|asyncns|sndfile|FLAC|mp3lame|mpg123|ogg|opus|vorbis(?:enc|file)?)\.so(?:\.|$)/;
   for (const directory of [shared,path.join(shared,'pulseaudio')]) for (const name of fs.readdirSync(directory)) if (audioLibrary.test(name)) {
     const dest = path.join(native,'lib',name);fs.copyFileSync(path.join(directory,name),dest);
     command(path.join(sysroot,'usr/bin/patchelf'),['--set-rpath','$ORIGIN',dest]);
   }
   fs.cpSync(path.join(sysroot,'usr/share/alsa'),path.join(native,'share/alsa'),{recursive:true});
-  for (const pkg of ['libfreetype6', 'libpng16-16t64', 'zlib1g', 'libbrotli1', 'libbz2-1.0',...audioPackages]) {
+  for (const pkg of ['libfreetype6', 'libpng16-16t64', 'zlib1g', 'libbrotli1', 'libbz2-1.0',...harfbuzzPackages,...audioPackages]) {
     const license = path.join(sysroot, 'usr/share/doc', pkg, 'copyright');
     if (fs.existsSync(license)) fs.copyFileSync(license, path.join(native, pkg + '.LICENSE'));
   }
@@ -104,13 +115,17 @@ async function setupLinux() {
 }
 async function setup() {
   fs.mkdirSync(sources, { recursive: true }); fs.mkdirSync(native, { recursive: true });
-  for (const key of ['yyjson', 'mpdecimal', ...(!windows ? ['sdlSource', 'ttfSource'] : [])]) {
+  for (const key of ['yyjson', 'mpdecimal', 'sqlite', 'utf8proc', 'miniz', 'libxml2', ...(!windows ? ['sdlSource', 'ttfSource'] : [])]) {
     const archive = await download(config[key]);
-    const dir = path.join(sources, config[key].file.replace(/\.tar\.gz$/, ''));
+    const dir = path.join(sources, config[key].file.replace(/\.(?:tar\.gz|tar\.xz|zip)$/, ''));
     if (!fs.existsSync(dir)) extract(archive, sources);
   }
   if (windows) await setupWindows(); else await setupLinux();
   buildYyjson();
+  buildSqlite();
+  buildUtf8proc();
+  buildDocx();
+  await download(config.graphemeTests);
   const build = path.join(native, 'build/tom-runtime');
   const cmake = path.join(platform, windows ? 'cmake/bin/cmake.exe' : 'cmake/bin/cmake');
   command(cmake, ['-S', path.join(root, 'tom-lang/runtime/stable'), '-B', build, '-G', 'Ninja',

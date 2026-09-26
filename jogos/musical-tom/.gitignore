@@ -1,0 +1,33 @@
+# Saídas de compilação e distribuição
+/build/
+/dist/
+/.tools/
+/node_modules/
+/coverage/
+/.cache/
+*.log
+*.tmp
+*.partial
+*.zip
+*.tar.gz
+*.sha256
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+*.a
+*.pdb
+
+# Preferências e arquivos locais
+/perfil.json
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
