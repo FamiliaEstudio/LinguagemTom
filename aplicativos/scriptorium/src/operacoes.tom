@@ -161,10 +161,20 @@ PersistenciaObterContexto[@Gravacao,@Contexto]
 TextosIguais[@Contexto,l'{}']
 Sex@ULTIMO
 ChamarxAcervoContextoPadrao[@Contexto]
+TextosIguais[@Hash,l'']
+Sex@ULTIMO
+ChamarxAcervoCampo[@Contexto,l'/ficha/titulo',l'Texto da seleção']
+Senao
 ChamarxAcervoCampo[@Contexto,l'/ficha/titulo',l'Texto importado']
 FimSe
+FimSe
+TextosIguais[@Hash,l'']
+Sex@ULTIMO
+ChamarxAcervoCampo[@Contexto,l'/motivo',l'Criação a partir da seleção']
+Senao
 ChamarxAcervoCampo[@Contexto,l'/motivo',l'Importação revisada']
 ChamarxAcervoVincularFonte[@Contexto,@Hash,@Inicio,@Fim]
+FimSe
 PersistenciaDefinirContexto[@Gravacao,@Contexto]
 PersistenciaSolicitar[@Gravacao,@GRAVAR_CONFIRMADO]
 ChamarxEsperarGravacao[@Janela,@Fonte,@Gravacao,@Erro]

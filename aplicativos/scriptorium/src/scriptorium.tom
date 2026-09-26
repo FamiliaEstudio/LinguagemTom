@@ -29,6 +29,7 @@ DefRecursoxPedidoyTextoCriar[l'',536870912]
 DefRecursoxErroyTextoCriar[l'',16777216]
 DefRecursoxTituloyTextoCriar[l'',1048576]
 DefRecursoxStatusyTextoCriar[l'',1048576]
+DefRecursoxMensagemAcaoyTextoCriar[l'',1048576]
 DefRecursoxAuxiliaryTextoCriar[l'',16777216]
 DefRecursoxImportadoHashyTextoCriar[l'',128]
 DefRecursoxImportadoOrigemyTextoCriar[l'',8192]
@@ -43,6 +44,8 @@ DefVarBlxGrupoColecoesyFalso
 DefRecursoxGruposyTextoCriar[l'[]',16777216]
 DefVarInSd64xHistoricoIndicey0
 DefVarInSd64xVersaoPreviay0
+DefVarInSd64xUltimaObraImportaday0
+DefVarInSd64xMensagemAtey0
 DefVarInSd64xProximoBackupy0
 DefVarBlxAtualizarListayVerdadeiro
 DefVarBlxForcaryFalso
@@ -156,7 +159,7 @@ Sex@ULTIMO
 DesenharTexto[@Janela,@Fonte,l'Clique no título para editar a ficha',568,64,@COR_SECUNDARIA]
 SubtrxyInSd32x@Larguray120
 ChamarxBotao[@Janela,@Fonte,l'Salvar',@ULTIMO,88,96]
-SubtrxyInSd32x@Alturay230
+SubtrxyInSd32x@Alturay260
 EditorArea[@Editor,568,178,@Conteudo,@ULTIMO]
 EditorAtualizar[@Editor,@Agora]
 EditorDesenhar[@Editor]
@@ -169,6 +172,8 @@ ChamarxBotao[@Janela,@Fonte,l'Esq.',873,136,55]
 ChamarxBotao[@Janela,@Fonte,l'Centro',934,136,55]
 ChamarxBotao[@Janela,@Fonte,l'Dir.',995,136,55]
 ChamarxBotao[@Janela,@Fonte,l'Just.',1056,136,55]
+ChamarxBotao[@Janela,@Fonte,l'Criar obra da seleção',568,@Rodape,194]
+ChamarxBotao[@Janela,@Fonte,l'Nova versão desta obra',770,@Rodape,212]
 FimSe
 CompararIgualxyInSd32x@Modoy3
 Sex@ULTIMO
@@ -281,6 +286,11 @@ AnexarTxt[@Status,l' · recuperação disponível']
 FimSe
 Senao
 CopiarTxt[@Status,l'Versão salva']
+FimSe
+CompararMaiorxyInSd64x@MensagemAtey@Agora
+Sex@ULTIMO
+AnexarTxt[@Status,l' · ']
+AnexarTxt[@Status,@MensagemAcao]
 FimSe
 TextosIguais[@Erro,l'']
 NaoBlx@ULTIMO
@@ -544,6 +554,14 @@ SubtrxyInSd32x@Alturay70
 ChamarxDentro[@Evento.x,@Evento.y,334,@ULTIMO,100,32]
 Sex@ULTIMO
 SetVarInSd32xAcaoy20
+FimSe
+ChamarxDentro[@Evento.x,@Evento.y,568,@Rodape,194,32]
+Sex@ULTIMO
+SetVarInSd32xAcaoy27
+FimSe
+ChamarxDentro[@Evento.x,@Evento.y,770,@Rodape,212,32]
+Sex@ULTIMO
+SetVarInSd32xAcaoy1
 FimSe
 FimSe
 CompararIgualxyInSd32x@Modoy90
@@ -828,6 +846,10 @@ Sex@ULTIMO
 PersistenciaAlterada[@Persistencia]
 Sex@ULTIMO
 PersistenciaSolicitar[@Persistencia,@GRAVAR_CONFIRMADO]
+Senao
+CopiarTxt[@MensagemAcao,l'Não há alterações para salvar como nova versão.']
+SomarxyInSd64x@Agoray8000000000
+SetVarInSd64xMensagemAtey@ULTIMO
 FimSe
 FimSe
 FimSe
@@ -942,6 +964,7 @@ CompararIgualxyInSd32x@Acaoy6
 Sex@ULTIMO
 EditorFoco[@Editor,Falso]
 ChamarxFormularioCaminho[@Formulario,l'DOCX, TXT ou Markdown a importar',l'']
+SetVarInSd64xUltimaObraImportaday0
 SetVarInSd32xModoy5
 FimSe
 CompararIgualxyInSd32x@Acaoy7
@@ -1096,12 +1119,51 @@ Sex@ULTIMO
 SetVarInSd64xAlvoy@Estado.selecionado
 FimSe
 ChamarxSalvarImportado[@Janela,@Fonte,@Banco,@CaminhoBanco,@Previa,@InicioU,@FimU,@Alvo,@ImportadoHash,@Erro]
-CompararMaiorxyInSd64x@ULTIMOy0
+DefVarInSd64xObraImportaday@ULTIMO
+CompararMaiorxyInSd64x@ObraImportaday0
 Sex@ULTIMO
 SetVarBlxAtualizarListayVerdadeiro
 CompararIgualxyInSd32x@Acaoy17
 Sex@ULTIMO
 Retornarx@Estado.selecionado
+Senao
+SetVarInSd64xUltimaObraImportaday@ObraImportada
+CopiarTxt[@MensagemAcao,l'Obra criada. Use Concluir para abri-la ou selecione outro trecho.']
+SomarxyInSd64x@Agoray8000000000
+SetVarInSd64xMensagemAtey@ULTIMO
+LimparTxt[@Erro]
+FimSe
+FimSe
+FimSe
+CompararIgualxyInSd32x@Acaoy27
+Sex@ULTIMO
+DocumentoCampo[@Documento,@DOCUMENTO_ANCORA]
+DefVarInSd64xInicioEditory@ULTIMO
+DocumentoCampo[@Documento,@DOCUMENTO_CURSOR]
+DefVarInSd64xFimEditory@ULTIMO
+CompararMaiorxyInSd64x@InicioEditory@FimEditor
+Sex@ULTIMO
+DefVarInSd64xTrocay@InicioEditor
+SetVarInSd64xInicioEditory@FimEditor
+SetVarInSd64xFimEditory@Troca
+FimSe
+CompararIgualxyInSd64x@InicioEditory@FimEditor
+Sex@ULTIMO
+CopiarTxt[@Erro,l'Selecione um trecho no editor antes de criar uma obra.']
+Senao
+InSd64ParaInUd64[@InicioEditor]
+DefVarInUd64xInicioUy@ULTIMO
+InSd64ParaInUd64[@FimEditor]
+DefVarInUd64xFimUy@ULTIMO
+ChamarxSalvarImportado[@Janela,@Fonte,@Banco,@CaminhoBanco,@Documento,@InicioU,@FimU,0,l'',@Erro]
+DefVarInSd64xNovaObray@ULTIMO
+CompararMaiorxyInSd64x@NovaObray0
+Sex@ULTIMO
+SetVarBlxAtualizarListayVerdadeiro
+CopiarTxt[@MensagemAcao,l'Obra criada. Original preservado; limpe os filtros para encontrá-la.']
+SomarxyInSd64x@Agoray8000000000
+SetVarInSd64xMensagemAtey@ULTIMO
+LimparTxt[@Erro]
 FimSe
 FimSe
 FimSe
@@ -1118,6 +1180,13 @@ SetVarInSd32xAcaoy14
 FimSe
 CompararIgualxyInSd32x@Acaoy14
 Sex@ULTIMO
+CompararIgualxyInSd32x@Modoy4
+Sex@ULTIMO
+CompararMaiorxyInSd64x@UltimaObraImportaday0
+Sex@ULTIMO
+Retornarx@UltimaObraImportada
+FimSe
+FimSe
 FormularioFoco[@Formulario,Falso]
 EditorFoco[@EditorPrevia,Falso]
 EditorFoco[@AvisosEditor,Falso]
@@ -1239,7 +1308,10 @@ FimSe
 CompararIgualxyInSd32x@Acaoy8
 Sex@ULTIMO
 PersistenciaPausar[@Persistencia,Verdadeiro]
+PersistenciaAlterada[@Persistencia]
+Sex@ULTIMO
 PersistenciaSolicitar[@Persistencia,@GRAVAR_RECUPERACAO]
+FimSe
 ChamarxEsperarGravacao[@Janela,@Fonte,@Persistencia,@Erro]
 Sex@ULTIMO
 DefRecursoxClasseyTextoCriar[l'manual',128]
