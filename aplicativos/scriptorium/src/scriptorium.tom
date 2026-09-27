@@ -5,6 +5,7 @@ PropInSd64xselecionado
 PropInSd64xdestino
 PropInSd64xversao
 PropInSd32xacao
+PropInSd32xzoom
 FimDef
 
 DefFuncaoxSessao[RefJanelaxJanela,FontexFonte,RefBancoSQLitexBanco,TxtxCaminhoBanco,TxtxConfiguracao,TxtxDados,RefTextoxRaiz,RefTextoxBackups,RefTextoxFiltros,RefTextoxSelecao,RefRegistro<ScriptoriumEstado>xEstado]yInSd64
@@ -13,6 +14,8 @@ DefRecursoxPersistenciayPersistenciaDocumentoAbrir[@CaminhoBanco,@Estado.selecio
 DefRecursoxEditoryEditorCriar[@Janela,@Documento,@Fonte]
 DefRecursoxPreviayDocumentoCriar[l'',67108864,134217728]
 DefRecursoxEditorPreviayEditorCriar[@Janela,@Previa,@Fonte]
+EditorZoom[@Editor,@Estado.zoom]
+EditorZoom[@EditorPrevia,@Estado.zoom]
 EditorSomenteLeitura[@EditorPrevia,Verdadeiro]
 DefRecursoxAvisosDocyDocumentoCriar[l'',1048576,2097152]
 DefRecursoxAvisosEditoryEditorCriar[@Janela,@AvisosDoc,@Fonte]
@@ -29,6 +32,7 @@ DefRecursoxPedidoyTextoCriar[l'',536870912]
 DefRecursoxErroyTextoCriar[l'',16777216]
 DefRecursoxTituloyTextoCriar[l'',1048576]
 DefRecursoxStatusyTextoCriar[l'',1048576]
+DefRecursoxZoomRotuloyTextoCriar[l'',32]
 DefRecursoxMensagemAcaoyTextoCriar[l'',1048576]
 DefRecursoxAuxiliaryTextoCriar[l'',16777216]
 DefRecursoxImportadoHashyTextoCriar[l'',128]
@@ -174,6 +178,11 @@ ChamarxBotao[@Janela,@Fonte,l'Dir.',995,136,55]
 ChamarxBotao[@Janela,@Fonte,l'Just.',1056,136,55]
 ChamarxBotao[@Janela,@Fonte,l'Criar obra da seleção',568,@Rodape,194]
 ChamarxBotao[@Janela,@Fonte,l'Nova versão desta obra',770,@Rodape,212]
+InteiroParaTexto[@Estado.zoom,@ZoomRotulo]
+AnexarTxt[@ZoomRotulo,l'%']
+ChamarxBotao[@Janela,@Fonte,l'−',990,@Rodape,46]
+ChamarxBotao[@Janela,@Fonte,@ZoomRotulo,1044,@Rodape,80]
+ChamarxBotao[@Janela,@Fonte,l'+',1132,@Rodape,46]
 FimSe
 CompararIgualxyInSd32x@Modoy3
 Sex@ULTIMO
@@ -562,6 +571,18 @@ FimSe
 ChamarxDentro[@Evento.x,@Evento.y,770,@Rodape,212,32]
 Sex@ULTIMO
 SetVarInSd32xAcaoy1
+FimSe
+ChamarxDentro[@Evento.x,@Evento.y,990,@Rodape,46,32]
+Sex@ULTIMO
+SetVarInSd32xAcaoy40
+FimSe
+ChamarxDentro[@Evento.x,@Evento.y,1044,@Rodape,80,32]
+Sex@ULTIMO
+SetVarInSd32xAcaoy41
+FimSe
+ChamarxDentro[@Evento.x,@Evento.y,1132,@Rodape,46,32]
+Sex@ULTIMO
+SetVarInSd32xAcaoy42
 FimSe
 FimSe
 CompararIgualxyInSd32x@Modoy90
@@ -1305,6 +1326,34 @@ CompararIgualxyInSd32x@Acaoy39
 Sex@ULTIMO
 DocumentoFormatar[@Documento,@ESTILO_ALINHAMENTO,3]
 FimSe
+CompararIgualxyInSd32x@Acaoy40
+Sex@ULTIMO
+SubtrxyInSd32x@Estado.zoomy10
+SetVarInSd32xEstado.zoomy@ULTIMO
+CompararMenorxyInSd32x@Estado.zoomy50
+Sex@ULTIMO
+SetVarInSd32xEstado.zoomy50
+FimSe
+EditorZoom[@Editor,@Estado.zoom]
+EditorZoom[@EditorPrevia,@Estado.zoom]
+FimSe
+CompararIgualxyInSd32x@Acaoy41
+Sex@ULTIMO
+SetVarInSd32xEstado.zoomy100
+EditorZoom[@Editor,@Estado.zoom]
+EditorZoom[@EditorPrevia,@Estado.zoom]
+FimSe
+CompararIgualxyInSd32x@Acaoy42
+Sex@ULTIMO
+SomarxyInSd32x@Estado.zoomy10
+SetVarInSd32xEstado.zoomy@ULTIMO
+CompararMaiorxyInSd32x@Estado.zoomy200
+Sex@ULTIMO
+SetVarInSd32xEstado.zoomy200
+FimSe
+EditorZoom[@Editor,@Estado.zoom]
+EditorZoom[@EditorPrevia,@Estado.zoom]
+FimSe
 CompararIgualxyInSd32x@Acaoy8
 Sex@ULTIMO
 PersistenciaPausar[@Persistencia,Verdadeiro]
@@ -1368,6 +1417,7 @@ DefRecursoxAuxiliaryTextoCriar[l'',16777216]
 DefRecursoxSelecaoyTextoCriar[l'[]',4194304]
 DefRecursoxFiltrosyTextoCriar[l'{"busca": "", "corpus": "", "persona": "", "autor": "", "genero": "", "estado": "", "tag": "", "colecao": "", "inicio": "", "fim": "", "historico": "0", "exata": "0", "arquivados": "0", "sem_persona": "0", "pagina": 0}',1048576]
 DefVarRegistro<ScriptoriumEstado>xEstadoyPadrao
+SetVarInSd32xEstado.zoomy100
 Tentar
 ArquivoDiretorioUsuario[l'Tom',l'Scriptorium',@Dados]
 ChamarxCaminho[@Dados,l'acervo',@Raiz]

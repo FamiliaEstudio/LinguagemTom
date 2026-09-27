@@ -12,7 +12,7 @@ typedef struct {size_t first,count;uint32_t start,end,alignment;float y,height,a
 struct TomEditor {
  TomWindow *window;TomDocument *document;TTF_Font *base,*fonts[73*8];Glyph *glyphs;
  uint64_t tick,generation,observed_generation,observed_cursor;size_t texture_bytes;Cell *cells;Line *lines;size_t cell_count,line_count;
- int x,y,width,height,focused,window_active,readonly,dragging,affinity,preferred,mouse_x,mouse_y;
+ int x,y,width,height,focused,window_active,readonly,dragging,scroll_dragging,scroll_grab,zoom,affinity,preferred,mouse_x,mouse_y;
  float scroll,content_height,preferred_x;TomText *composition;int composition_start,composition_length;
  int64_t last_tick,last_click;int click_x,click_y;
 };
@@ -20,7 +20,7 @@ static int32_t valid(TomEditor *e){return e&&e->window&&!e->window->closed&&tom_
 static void glyph_clear(TomEditor *e,Glyph *g){if(g->texture){SDL_DestroyTexture(g->texture);e->texture_bytes-=g->texture_bytes;}free(g->text);memset(g,0,sizeof(*g));}
 static TTF_Font *font_for(TomEditor *e,uint32_t style){
  unsigned size=style>>8,bits=style&7,index=size*8+bits;if(size<8||size>72)return NULL;
- if(!e->fonts[index]){TTF_Font *f=TTF_CopyFont(e->base);if(!f)return NULL;if(!TTF_SetFontSize(f,(float)size)){TTF_CloseFont(f);return NULL;}TTF_SetFontStyle(f,(bits&1?TTF_STYLE_BOLD:0)|(bits&2?TTF_STYLE_ITALIC:0)|(bits&4?TTF_STYLE_UNDERLINE:0));e->fonts[index]=f;}
+ if(!e->fonts[index]){TTF_Font *f=TTF_CopyFont(e->base);if(!f)return NULL;if(!TTF_SetFontSize(f,(float)size*e->zoom/100.f)){TTF_CloseFont(f);return NULL;}TTF_SetFontStyle(f,(bits&1?TTF_STYLE_BOLD:0)|(bits&2?TTF_STYLE_ITALIC:0)|(bits&4?TTF_STYLE_UNDERLINE:0));e->fonts[index]=f;}
  return e->fonts[index];
 }
 static uint64_t hash_text(const char *text,size_t n,uint32_t style){uint64_t h=UINT64_C(1469598103934665603)^style;for(size_t i=0;i<n;i++){h^=(unsigned char)text[i];h*=UINT64_C(1099511628211);}return h?h:1;}
@@ -50,12 +50,12 @@ static int is_space(const TomDocState *s,uint32_t cp){return cp<s->count&&(s->te
 static int is_newline(const TomDocState *s,uint32_t cp){return cp<s->count&&s->text->data[s->offsets[cp]]=='\n';}
 static void finish_line(TomEditor *e,Cell *cells,Line *lines,size_t *n,size_t first,size_t end,uint32_t start,uint32_t stop,int last,float *y){
  TomDocState *s=&e->document->state;Line *line=&lines[(*n)++];line->first=first;line->count=end-first;line->start=start;line->end=stop;line->last=last;line->y=*y;line->alignment=tom_document_alignment_at(e->document,start);
- float origin=first<end?cells[first].x:0;line->height=16;line->ascent=12;
+ float origin=first<end?cells[first].x:0;line->height=16.f*e->zoom/100.f;line->ascent=12.f*e->zoom/100.f;
  for(size_t i=first;i<end;i++){cells[i].x-=origin;cells[i].line=(uint32_t)(*n-1);TTF_Font *f=font_for(e,cells[i].style);if(f){float h=(float)TTF_GetFontHeight(f)*1.2f;if(h>line->height)line->height=h;if(TTF_GetFontAscent(f)>line->ascent)line->ascent=(float)TTF_GetFontAscent(f);}}
  line->width=first<end?cells[end-1].x+cells[end-1].width:0;
  size_t visual_end=end;while(visual_end>first&&(is_space(s,cells[visual_end-1].start)||is_newline(s,cells[visual_end-1].start)))visual_end--;
  float visual_width=visual_end>first?cells[visual_end-1].x+cells[visual_end-1].width:0;
- float room=fmaxf(0,(float)e->width-20-visual_width),offset=line->alignment==1?room/2:line->alignment==2?room:0;
+ float room=fmaxf(0,(float)e->width-32-visual_width),offset=line->alignment==1?room/2:line->alignment==2?room:0;
  size_t spaces=0;if(line->alignment==3&&!last)for(size_t i=first;i<visual_end;i++)if(s->text->data[s->offsets[cells[i].start]]==' ')spaces++;
  float extra=spaces?room/(float)spaces:0,shift=offset;
  for(size_t i=first;i<end;i++){cells[i].x+=shift;if(i<visual_end&&s->text->data[s->offsets[cells[i].start]]==' '){cells[i].width+=extra;shift+=extra;}}
@@ -83,7 +83,7 @@ static int32_t layout(TomEditor *e){
  for(uint32_t cp=line_start;cp<stop;){
   uint32_t end=(uint32_t)tom_document_next(e->document,cp),style=tom_document_style_at(e->document,cp);float width=0;
   if(!is_newline(s,cp)){Glyph *g=glyph_get(e,s->text->data+s->offsets[cp],s->offsets[end]-s->offsets[cp],style,0);if(!g){free(cells);free(lines);return TOM_RESOURCE;}width=(float)g->width;}
-  if(x+width>e->width-20&&n>first&&!is_newline(s,cp)){
+  if(x+width>e->width-32&&n>first&&!is_newline(s,cp)){
    size_t split=last_break>first?last_break:n;uint32_t stop=split<n?cells[split].start:cp;
    finish_line(e,cells,lines,&nlines,first,split,line_start,stop,0,&y);
    float origin=split<n?cells[split].x:x;for(size_t i=split;i<n;i++)cells[i].x-=origin;x-=origin;first=split;line_start=stop;last_break=0;
@@ -118,6 +118,11 @@ static uint64_t hit_line(TomEditor *e,size_t row,float x){
  e->affinity=!line->last;return cp;
 }
 static void scroll_clamp(TomEditor *e){if(e->scroll<0)e->scroll=0;float max=fmaxf(0,e->content_height-e->height+20);if(e->scroll>max)e->scroll=max;}
+static int32_t input_area(TomEditor *e);
+static float scroll_max(TomEditor *e){return fmaxf(0,e->content_height-e->height+20);}
+static float scroll_thumb(TomEditor *e){float track=(float)e->height-4;return fminf(track,fmaxf(28.f,track*(e->height-20)/e->content_height));}
+static float scroll_thumb_y(TomEditor *e){float max=scroll_max(e);return (float)e->y+2+(max>0?((float)e->height-4-scroll_thumb(e))*e->scroll/max:0);}
+static int32_t scroll_from_mouse(TomEditor *e,int y){float travel=(float)e->height-4-scroll_thumb(e);e->scroll=travel>0?((float)y-e->y-2-e->scroll_grab)*scroll_max(e)/travel:0;scroll_clamp(e);return input_area(e);}
 static int32_t input_area(TomEditor *e){
  if(!e->focused||!e->window_active)return TOM_OK;
  size_t row=caret_line(e,e->document->state.cursor);Line *line=&e->lines[row];float x=(float)e->x+10+caret_x(e,row,e->document->state.cursor),y=(float)e->y+10+line->y-e->scroll;
@@ -139,7 +144,7 @@ int32_t tom_editor_new(TomWindow *window,TomDocument *doc,TomFont *font,TomEdito
  if(!window||window->closed||!doc||!font||!out||!tom_ui_on_main())return TOM_RESOURCE;if(doc->attached)return TOM_INVALID;
  TomEditor *e=calloc(1,sizeof(*e));if(!e)return TOM_MEMORY;e->base=TTF_CopyFont(font->font);e->glyphs=calloc(GLYPHS,sizeof(Glyph));int32_t error=tom_text_dynamic_new("",67108864,&e->composition);
  if(!e->base||!e->glyphs||error){if(e->base)TTF_CloseFont(e->base);free(e->glyphs);tom_text_free(e->composition);free(e);return error?error:TOM_MEMORY;}
- e->document=doc;e->window=window;e->width=640;e->height=400;e->window_active=1;e->generation=UINT64_MAX;doc->attached=1;tom_document_retain(doc);tom_ui_window_retain(window);window->editor_count++;
+ e->document=doc;e->window=window;e->width=640;e->height=400;e->zoom=100;e->window_active=1;e->generation=UINT64_MAX;doc->attached=1;tom_document_retain(doc);tom_ui_window_retain(window);window->editor_count++;
  tom_object_acquired();tom_editor_free(*out);*out=e;return TOM_OK;
 }
 int32_t tom_editor_area(TomEditor *e,int32_t x,int32_t y,int32_t width,int32_t height){
@@ -149,8 +154,8 @@ int32_t tom_editor_area(TomEditor *e,int32_t x,int32_t y,int32_t width,int32_t h
 }
 int32_t tom_editor_focus(TomEditor *e,int32_t focus){
  int32_t error=valid(e);if(error)return error;if(focus!=0&&focus!=1)return TOM_INVALID;
- if(focus){TomEditor *old=e->window->editor_focus;if(old&&old!=e){old->focused=0;old->dragging=0;cancel_composition(old);tom_document_break_group(old->document);}e->window->editor_focus=e;e->focused=1;if(!SDL_StartTextInput(e->window->window))return TOM_RESOURCE;return ensure_cursor(e);}
- e->focused=0;e->dragging=0;cancel_composition(e);tom_document_break_group(e->document);if(e->window->editor_focus==e){e->window->editor_focus=NULL;if(!SDL_StopTextInput(e->window->window))return TOM_RESOURCE;}return TOM_OK;
+ if(focus){TomEditor *old=e->window->editor_focus;if(old&&old!=e){old->focused=0;old->dragging=0;old->scroll_dragging=0;cancel_composition(old);tom_document_break_group(old->document);}e->window->editor_focus=e;e->focused=1;if(!SDL_StartTextInput(e->window->window))return TOM_RESOURCE;return ensure_cursor(e);}
+ e->focused=0;e->dragging=0;e->scroll_dragging=0;cancel_composition(e);tom_document_break_group(e->document);if(e->window->editor_focus==e){e->window->editor_focus=NULL;if(!SDL_StopTextInput(e->window->window))return TOM_RESOURCE;}return TOM_OK;
 }
 static int32_t selection_move(TomEditor *e,uint64_t cp,int shift){int32_t error=tom_document_select(e->document,shift?e->document->state.anchor:cp,cp);if(error)return error;cancel_composition(e);return ensure_cursor(e);}
 static int32_t copy_selection(TomEditor *e,int cut){
@@ -183,10 +188,17 @@ int32_t tom_editor_event(TomEditor *e,TomEvent *event,int32_t *consumed){
  if(event->window_id&&event->window_id!=(int32_t)SDL_GetWindowID(e->window->window))return TOM_OK;
  error=layout(e);if(error)return error;
  int inside=event->x>=e->x&&event->x<e->x+e->width&&event->y>=e->y&&event->y<e->y+e->height;
- if(event->kind==8){e->window_active=0;e->dragging=0;cancel_composition(e);tom_document_break_group(e->document);return TOM_OK;}
+ if(event->kind==8){e->window_active=0;e->dragging=0;e->scroll_dragging=0;cancel_composition(e);tom_document_break_group(e->document);return TOM_OK;}
  if(event->kind==9){e->window_active=1;return input_area(e);}
+ if(event->kind==10&&e->scroll_dragging){*consumed=1;return scroll_from_mouse(e,event->y);}
+ if(event->kind==11&&e->scroll_dragging){e->scroll_dragging=0;*consumed=1;return TOM_OK;}
  if(event->kind==4&&event->button==1){
   if(!inside){if(e->focused)tom_editor_focus(e,0);return TOM_OK;}
+  if(scroll_max(e)>0&&event->x>=e->x+e->width-18){
+   float top=scroll_thumb_y(e),thumb=scroll_thumb(e);
+   e->scroll_grab=event->y>=top&&event->y<top+thumb?event->y-(int)top:(int)(thumb/2);
+   e->scroll_dragging=1;*consumed=1;return scroll_from_mouse(e,event->y);
+  }
   error=tom_editor_focus(e,1);if(error)return error;*consumed=1;e->preferred=0;e->mouse_x=event->x;e->mouse_y=event->y;
   uint64_t cp=hit_line(e,line_at_y(e,(float)(event->y-e->y-10)+e->scroll),(float)(event->x-e->x-10));
   int twice=event->clicks?event->clicks>=2:(event->timestamp>e->last_click&&event->timestamp-e->last_click<400000000&&abs(event->x-e->click_x)<4&&abs(event->y-e->click_y)<4);
@@ -239,12 +251,13 @@ int32_t tom_editor_draw(TomEditor *e){
    rect(renderer,x+before,y,1.5f,line->height,(SDL_Color){30,80,160,255});SDL_FRect target={x,y+line->ascent-g->ascent,(float)g->width,(float)g->height};if(g->texture)SDL_RenderTexture(renderer,g->texture,NULL,&target);rect(renderer,x,y+line->height-2,(float)g->width,1,(SDL_Color){30,80,160,255});
   }else if((e->last_tick/500000000)%2==0)rect(renderer,x,y,1.5f,line->height,(SDL_Color){20,25,35,255});
  }
- if(e->content_height>e->height-20){float track=(float)e->height-4,thumb=fmaxf(20,track*(e->height-20)/e->content_height),y=(float)e->y+2+(track-thumb)*e->scroll/fmaxf(1,e->content_height-e->height+20);rect(renderer,(float)(e->x+e->width-6),y,4,thumb,(SDL_Color){125,135,150,255});}
+ if(scroll_max(e)>0){rect(renderer,(float)(e->x+e->width-18),(float)e->y+2,16,(float)e->height-4,(SDL_Color){231,235,240,255});rect(renderer,(float)(e->x+e->width-16),scroll_thumb_y(e),12,scroll_thumb(e),e->scroll_dragging?(SDL_Color){67,104,156,255}:(SDL_Color){121,135,155,255});}
  {SDL_FRect border={(float)e->x,(float)e->y,(float)e->width,(float)e->height};SDL_SetRenderDrawColor(renderer,e->focused?40:170,e->focused?100:175,e->focused?190:180,255);if(!SDL_RenderRect(renderer,&border))error=TOM_RESOURCE;}
 done:
  if(!SDL_SetRenderClipRect(renderer,clipped?&previous:NULL)&&!error)error=TOM_RESOURCE;return error;
 }
-int32_t tom_editor_field(TomEditor *e,int32_t field,int64_t *out){int32_t error=valid(e);if(error)return error;if(!out)return TOM_INVALID;error=layout(e);if(error)return error;switch(field){case 0:*out=e->focused;break;case 1:*out=(int64_t)e->line_count;break;case 2:*out=(int64_t)e->scroll;break;case 3:*out=(int64_t)e->content_height;break;case 4:*out=(int64_t)e->texture_bytes;break;default:return TOM_BOUNDS;}return TOM_OK;}
+int32_t tom_editor_field(TomEditor *e,int32_t field,int64_t *out){int32_t error=valid(e);if(error)return error;if(!out)return TOM_INVALID;error=layout(e);if(error)return error;switch(field){case 0:*out=e->focused;break;case 1:*out=(int64_t)e->line_count;break;case 2:*out=(int64_t)e->scroll;break;case 3:*out=(int64_t)e->content_height;break;case 4:*out=(int64_t)e->texture_bytes;break;case 5:*out=e->zoom;break;default:return TOM_BOUNDS;}return TOM_OK;}
+int32_t tom_editor_zoom(TomEditor *e,int32_t percent){int32_t error=valid(e);if(error)return error;if(percent<50||percent>200)return TOM_BOUNDS;if(percent==e->zoom)return TOM_OK;for(size_t i=0;i<GLYPHS;i++)glyph_clear(e,&e->glyphs[i]);for(size_t i=0;i<73*8;i++){if(e->fonts[i])TTF_CloseFont(e->fonts[i]);e->fonts[i]=NULL;}float ratio=(float)percent/e->zoom;e->zoom=percent;e->scroll*=ratio;e->generation=UINT64_MAX;return ensure_cursor(e);}
 #ifdef TOM_EDITOR_TEST
 /* Differential check: incremental paragraph caches must match a fresh layout. */
 int32_t tom_editor_test_cache(TomEditor *e){

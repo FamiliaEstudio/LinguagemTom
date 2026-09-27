@@ -72,7 +72,8 @@ Sem seleção, estilos de caracteres definem a próxima digitação. Com seleç�
 | `EditorProcessarEvento[Editor,Evento]` | Retorna `Bl`: se consumido, não encaminhar o mesmo evento a outro controle. |
 | `EditorAtualizar[Editor,TempoNs]` | Atualiza cursor, área de composição e rolagem por arraste. Chamar em cada quadro. |
 | `EditorDesenhar[Editor]` | Desenha somente linhas visíveis, com recorte. Não apresenta o quadro. |
-| `EditorCampo[Editor,Campo]` | 0 foco, 1 linhas, 2 rolagem, 3 altura total, 4 bytes de texturas. Constantes `EDITOR_*` em `tom/editor`. |
+| `EditorCampo[Editor,Campo]` | 0 foco, 1 linhas, 2 rolagem, 3 altura total, 4 bytes de texturas, 5 zoom em porcentagem. Constantes `EDITOR_*` em `tom/editor`. |
+| `EditorZoom[Editor,Porcentagem]` | Ajusta a visualização entre 50% e 200%, sem alterar os estilos do documento. |
 | `AreaTransferenciaLer[Janela,Destino]` | Copia UTF-8 completo; sem truncamento. |
 | `AreaTransferenciaEscrever[Janela,Conteudo]` | Publica texto simples pela API SDL. |
 | `JanelaTamanho[Janela,Campo]` | 0 largura, 1 altura nas coordenadas de janela. |
@@ -80,7 +81,7 @@ Sem seleção, estilos de caracteres definem a próxima digitação. Com seleç�
 
 A disposição é compartilhada pelo desenho, cursor e identificação do clique. O cache reutiliza geometria dos parágrafos não alterados; mudanças de largura e alterações acumuladas recompõem a disposição. Texturas são criadas sob demanda para grafemas visíveis, com cache limitado a 16 MiB. Não se cria uma textura do livro inteiro. Um parágrafo muito longo ainda exige recompor suas linhas quando editado. A indexação do documento continua linear no tamanho do conteúdo.
 
-São suportados setas, Home/End, Page Up/Down, Ctrl+Home/End, Shift para seleção, Ctrl+setas por palavras, duplo clique, arraste com rolagem, roda do mouse e Ctrl+A/C/X/V/Z/Y/Shift+Z. Letras, marcas, números e apóstrofo interno formam palavras. AltGr não aciona os atalhos Ctrl do editor. Tab permanece disponível à aplicação para alternar foco entre editor e controles; a demonstração implementa essa navegação nos dois sentidos.
+São suportados setas, Home/End, Page Up/Down, Ctrl+Home/End, Shift para seleção, Ctrl+setas por palavras, duplo clique, arraste com rolagem, barra de rolagem arrastável, roda do mouse e Ctrl+A/C/X/V/Z/Y/Shift+Z. Letras, marcas, números e apóstrofo interno formam palavras. AltGr não aciona os atalhos Ctrl do editor. Tab permanece disponível à aplicação para alternar foco entre editor e controles; a demonstração implementa essa navegação nos dois sentidos.
 
 O evento 13, `EVENTO_COMPOSICAO`, é opt-in por `EditorCriar`. `EventoTexto` copia a composição provisória ou o texto confirmado. Campos 15/16 representam início/comprimento da seleção da composição; campo 14 informa cliques. Os identificadores antigos não mudam. Janelas com editores usam eventos textuais dinâmicos limitados a 64 MiB, incluindo terminador; janelas antigas mantêm o contrato anterior. A composição aparece separadamente, com seleção e sublinhado; só a confirmação altera o documento e o histórico.
 

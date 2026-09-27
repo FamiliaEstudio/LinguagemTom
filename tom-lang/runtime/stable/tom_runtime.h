@@ -93,6 +93,7 @@ int32_t tom_editor_event(TomEditor *editor,TomEvent *event,int32_t *consumed);
 int32_t tom_editor_tick(TomEditor *editor,int64_t time);
 int32_t tom_editor_draw(TomEditor *editor);
 int32_t tom_editor_field(TomEditor *editor,int32_t field,int64_t *out);
+int32_t tom_editor_zoom(TomEditor *editor,int32_t percent);
 int32_t tom_clipboard_read(TomWindow *window,TomText *out);
 int32_t tom_clipboard_write(TomWindow *window,const char *text);
 int32_t tom_window_logical_size(TomWindow *window,int32_t width,int32_t height);

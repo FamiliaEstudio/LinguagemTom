@@ -29,6 +29,11 @@ async function main(){fs.mkdirSync(root,{recursive:true});const results=[];for(c
  const afterNew=new DatabaseSync(path.join(newDir,'acervo/dados.sqlite'));
  assert.equal(afterNew.prepare('SELECT count(*) AS n FROM versoes').get().n,1);
  assert.equal(afterNew.prepare('SELECT count(*) AS n FROM tom_editor_recuperacoes').get().n,0);afterNew.close();
+ const usabilityDir=fs.mkdtempSync(path.join(root,'usability-'));
+ await run(binary,usabilityDir,'text Zoom preservado.\n'+save+click(1150,850)+click(1000,850)+click(1060,850)+click(320,36)+'mouse 1405 180\nmotion 1405 790\nrelease 1405 790\n'+click(740,850)+'quit\n');
+ const usability=new DatabaseSync(path.join(usabilityDir,'acervo/dados.sqlite'));
+ assert.equal(usability.prepare('SELECT conteudo FROM acervo').get().conteudo,'Zoom preservado.');
+ assert.equal(usability.prepare('SELECT count(*) AS n FROM versoes').get().n,1);usability.close();
  const closeDir=fs.mkdtempSync(path.join(root,'close-'));
  await run(binary,closeDir,'text Texto pendente.\nquit\nquit\n'+click(630,298)+'wait 400\n');
  const afterClose=new DatabaseSync(path.join(closeDir,'acervo/dados.sqlite'));

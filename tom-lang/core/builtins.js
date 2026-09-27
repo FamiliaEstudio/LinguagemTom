@@ -51,6 +51,7 @@ const builtins = {
   EditorAtualizar: {"c":"tom_editor_tick","args":["RefEditorTexto","InSd64"],"result":"Vazio","lib":"editor_ui","access":["readwrite","read"]},
   EditorDesenhar: {"c":"tom_editor_draw","args":["RefEditorTexto"],"result":"Vazio","lib":"editor_ui","access":["readwrite"]},
   EditorCampo: {"c":"tom_editor_field","args":["RefEditorTexto","InSd32"],"result":"InSd64","lib":"editor_ui","access":["readwrite","read"]},
+  EditorZoom: {"c":"tom_editor_zoom","args":["RefEditorTexto","InSd32"],"result":"Vazio","lib":"editor_ui","access":["readwrite","read"]},
   AreaTransferenciaLer: {"c":"tom_clipboard_read","args":["Janela","RefBuffer"],"result":"Vazio","lib":"ui","access":["read","readwrite"]},
   AreaTransferenciaEscrever: {"c":"tom_clipboard_write","args":["Janela","Txt"],"result":"Vazio","lib":"ui","access":["read","read"]},
   JanelaAreaLogica: {"c":"tom_window_logical_size","args":["RefJanela","InSd32","InSd32"],"result":"Vazio","lib":"ui","access":["readwrite","read","read"]},
