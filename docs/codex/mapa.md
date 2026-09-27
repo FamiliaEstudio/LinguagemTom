@@ -44,7 +44,7 @@ Windows/PowerShell: `. ./scripts/env.ps1`; use `npm.cmd` se necessário. Pré-re
 | CLI/imports no disco | `node --test tom-lang/tests/cli.test.js` |
 | LLVM/controle/decimais | Testes pertinentes em `native.test.js`, `control.test.js`, `decimal.test.js`, dentro de `tom-lang/tests/` |
 | Texto dinâmico e SQLite | `npm --prefix tom-lang run test:scriptorium` |
-| Scriptorium: acervo, DOCX e backup | `aplicativos/scriptorium/README.md`; `npm --prefix tom-lang run test:scriptorium-app`; `npm --prefix tom-lang run verify:scriptorium-app` |
+| Scriptorium: acervo, DOCX, Excel e backup | `aplicativos/scriptorium/README.md`; `aplicativos/scriptorium/GUIA_IA_IMPORTACAO.md`; `npm --prefix tom-lang run test:scriptorium-app`; `npm --prefix tom-lang run verify:scriptorium-app`; XLSX isolado: `node aplicativos/scriptorium/scripts/verify-planilha.js` |
 | Documento/editor/persistência | `npm --prefix tom-lang run test:document-editor` |
 | Canal local | `node --test --test-concurrency=1 tom-lang/tests/channel.test.js tom-lang/tests/channel-protocol.test.js` |
 | Grafos | `node --test tom-lang/tests/graph.test.js` e testes do mapa em `aplicativos/tom-companion/tests/` |

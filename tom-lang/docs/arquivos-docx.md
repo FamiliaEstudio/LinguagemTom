@@ -25,11 +25,22 @@ O construtor copia um objeto JSON de pedido e inicia uma thread. `ArquivoTrabalh
 Pedidos aceitos:
 
 - `importar`: origem, pasta de fontes opcional; retorna documento, hash, origem e avisos.
+- `ler_planilha`: origem `.xlsx`, aba pelo nome exato e pasta de fontes opcional; retorna hash, origem, aba e linhas de células tipadas. Veja o contrato abaixo.
 - `exportar`: destino, formato e documentos ordenados; alternativamente banco, consulta somente leitura e parâmetro textual. A consulta retorna um TomDocumento por linha, em uma coluna.
 - `backup`: banco, raiz, destino, classe e consulta somente leitura com caminho relativo e hash esperado opcional. Usa uma transação de leitura e a API SQLite Backup. Publica manifesto TomSnapshot v1 após validar banco e arquivos.
 - `restaurar`: origem e pasta de destino. Confere hashes e integridade e publica uma pasta nova. Não sobrescreve o acervo em uso.
 
 O cancelamento ocorre entre unidades consistentes. A porcentagem indica avanço aproximado; uma unidade grande pode demorar sem alterar o percentual. Pedidos e documentos têm limites de memória; falhas retornam status e não são apresentadas como sucesso.
+
+### XLSX
+
+`ler_planilha` reutiliza miniz/libxml2 e executa fora da thread gráfica, sem novo builtin ou alteração de ABI. Exemplo de pedido: `{"operacao":"ler_planilha","origem":"entrada.xlsx","aba":"Textos","fontes":"acervo/fontes"}`. O resultado contém `hash`, `origem`, `aba` e `linhas`, uma lista de objetos `{linha,celulas}`. Cada célula contém `coluna` (índice começando em 1), `referencia` (como `B2`), `tipo`, `valor` textual e `unidades_utf16` (comprimento para conferir os limites do Excel inclusive com emoji). Células omitidas no XML não deslocam as demais; suas coordenadas continuam explícitas.
+
+Tipos: `texto`, `vazio`, `numero`, `booleano`, `data`, `erro`, `formula` e `desconhecido`. Fórmulas não são executadas nem substituídas por valores em cache; são devolvidas com tipo `formula` para validação do consumidor. Texto literal começando por `=` continua sendo texto. O runtime não interpreta cabeçalhos, fichas ou regras do Scriptorium.
+
+São suportados relacionamentos internos, namespaces transicional e estrito, textos compartilhados, textos inline e concatenação dos trechos formatados. Anotações fonéticas não entram no valor. Espaços e quebras são preservados, incluindo escapes SpreadsheetML `_xNNNN_` e seus escapes literais. Não há cálculo de fórmulas, conversão de números de série em datas ou preservação de estilos. Abas com células mescladas e referências externas da aba solicitada são recusadas. Arquivos criptografados e estruturas incompatíveis retornam erro legível.
+
+Limites: ZIP de 512 MiB, XML de 64 MiB por parte e 128 MiB no total, 50.000 linhas, 250.000 células, 250.000 textos compartilhados, 32 MiB de valores e 32 MiB de textos compartilhados. O JSON final fica abaixo de 256 MiB. DTD, entidades externas e acesso à rede são desativados; partes são lidas diretamente do ZIP. Cancelamento é consultado entre partes, textos compartilhados, linhas e células. Quando há `fontes`, o leitor usa a cópia conferida por hash; não altera o arquivo de origem.
 
 ## Formulario
 

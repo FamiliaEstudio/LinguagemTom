@@ -84,6 +84,15 @@ try:
             deadline=time.monotonic()+25
             while not os.path.exists(ready) and time.monotonic()<deadline:time.sleep(.05)
             if not os.path.exists(ready):raise RuntimeError('Scriptorium did not save native input.')
+            if '--xlsx' in sys.argv:
+                state_click(590,36);time.sleep(.4)
+                text(sys.argv[sys.argv.index('--xlsx')+1]);state_click(620,850);time.sleep(.8)
+                state_click(640,115);state_click(530,805);state_click(100,850)
+                xlsx_ready=sys.argv[sys.argv.index('--xlsx-ready')+1]
+                deadline=time.monotonic()+25
+                while not os.path.exists(xlsx_ready) and time.monotonic()<deadline:time.sleep(.05)
+                if not os.path.exists(xlsx_ready):raise RuntimeError('Scriptorium did not import XLSX through the native window.')
+                time.sleep(.3);state_click(300,850);time.sleep(.3)
             state_click(320,36);state_click(730,850);state_click(250,36)
             bind('XResizeWindow',[Display,Window,C.c_uint,C.c_uint])(d,window,1280,800);flush(d);time.sleep(.3)
         elif name=='editor':

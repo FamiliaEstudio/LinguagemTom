@@ -1,0 +1,60 @@
+Importar[l'./acervo.tom']
+Importar[l'./planilha-sql.tom']
+
+DefFuncaoxPlanilhaArquivo[RefBancoSQLitexBanco,TxtxCaminho]yBl
+DefRecursoxQySQLitePreparar[@Banco,l'SELECT lower(substr(?1,-5))=\'.xlsx\'']
+SQLiteVincularTexto[@Q,1,@Caminho]
+SQLiteAvancar[@Q]
+SQLiteColunaInSd64[@Q,0]
+CompararIgualxyInSd64x@ULTIMOy1
+Retornarx@ULTIMO
+FimFuncao
+
+// Small queries finish in this scope before another operation uses the connection.
+DefFuncaoxPlanilhaTexto[RefBancoSQLitexBanco,TxtxSQL,InSd64xParametro,RefTextoxSaida]yVazio
+LimparTxt[@Saida]
+DefRecursoxQySQLitePreparar[@Banco,@SQL]
+SQLiteVincularInSd64[@Q,1,@Parametro]
+SQLiteAvancar[@Q]
+Sex@ULTIMO
+SQLiteColunaTexto[@Q,0,@Saida]
+FimSe
+FimFuncao
+
+DefFuncaoxPlanilhaNumero[RefBancoSQLitexBanco,TxtxSQL,InSd64xParametro]yInSd64
+DefRecursoxQySQLitePreparar[@Banco,@SQL]
+SQLiteVincularInSd64[@Q,1,@Parametro]
+SQLiteAvancar[@Q]
+Sex@ULTIMO
+SQLiteColunaInSd64[@Q,0]
+Retornarx@ULTIMO
+FimSe
+Retornarx0
+FimFuncao
+
+DefFuncaoxPlanilhaComando[RefBancoSQLitexBanco,TxtxSQL,InSd64xParametro]yVazio
+DefRecursoxQySQLitePreparar[@Banco,@SQL]
+SQLiteVincularInSd64[@Q,1,@Parametro]
+SQLiteAvancar[@Q]
+FimFuncao
+
+DefFuncaoxPlanilhaAlternar[RefBancoSQLitexBanco,InSd64xLinha]yVazio
+ChamarxPlanilhaComando[@Banco,l'UPDATE sc_planilha_itens SET selecionada=1-selecionada WHERE linha=?1 AND erro=\'\' AND confirmada=0 AND (SELECT erro FROM sc_planilha_meta)=\'\'',@Linha]
+FimFuncao
+
+DefFuncaoxPlanilhaResumo[RefBancoSQLitexBanco,RefTextoxSaida]yVazio
+ChamarxPlanilhaTexto[@Banco,l'SELECT count(*)||\' obras · \'||coalesce(sum(selecionada),0)||\' selecionadas · \'||coalesce(sum(confirmada>0),0)||\' concluídas · \'||coalesce(sum(erro<>\'\'),0)||\' com erros · \'||coalesce(sum(anterior>0 AND confirmada=0),0)||\' já importadas\' FROM sc_planilha_itens WHERE ?1=0',0,@Saida]
+FimFuncao
+
+DefFuncaoxPlanilhaRelatorio[RefBancoSQLitexBanco,InSd64xLinha,RefTextoxSaida]yVazio
+ChamarxPlanilhaTexto[@Banco,l'SELECT \'Linha \'||linha||char(10)||CASE WHEN erro<>\'\' THEN erro||char(10)||\'Corrija a planilha e abra novamente.\'||char(10) ELSE \'\' END||CASE WHEN anterior>0 THEN \'Esta linha já foi importada deste arquivo.\'||char(10) ELSE \'\' END||char(10)||\'FICHA (inclui padrões para campos vazios)\'||char(10)||(SELECT group_concat(CASE key WHEN \'titulo\' THEN \'Título\' WHEN \'genero\' THEN \'Gênero\' WHEN \'subgenero\' THEN \'Subgênero\' WHEN \'composicao\' THEN \'Composição\' WHEN \'publicacao\' THEN \'Publicação\' WHEN \'colecoes\' THEN \'Coleções\' ELSE key END||\': \'||CASE WHEN j.key IN(\'tags\',\'colecoes\') THEN coalesce((SELECT group_concat(value,\'; \') FROM json_each(j.value)),\'\') ELSE coalesce(j.value,\'\') END,char(10)) FROM json_each(contexto,\'$.ficha\') j WHERE key NOT IN(\'importacao_planilha\',\'arquivado\'))||char(10)||char(10)||\'ORIGEM INFORMADA\'||char(10)||coalesce(json_extract(dados,\'$.arquivo_origem\'),\'\')||\' · \'||coalesce(json_extract(dados,\'$.localizacao_origem\'),\'\')||char(10)||char(10)||\'SUGESTÕES DA IA — \'||CASE WHEN sugestoes=1 THEN \'aplicadas\' ELSE \'aguardando sua decisão\' END||char(10)||\'Corpus: \'||coalesce(json_extract(dados,\'$.corpus_sugerido\'),\'\')||char(10)||\'Gênero: \'||coalesce(json_extract(dados,\'$.genero_sugerido\'),\'\')||char(10)||\'Tags: \'||coalesce(json_extract(dados,\'$.tags_sugeridas\'),\'\')||char(10)||\'Justificativa: \'||coalesce(json_extract(dados,\'$.justificativa_ia\'),\'\') FROM sc_planilha_itens WHERE linha=?1',@Linha,@Saida]
+FimFuncao
+
+DefFuncaoxPlanilhaLimparRascunho[RefBancoSQLitexBanco,InSd64xId]yVazio
+DefRecursoxTransacaoySQLiteTransacaoIniciar[@Banco]
+ChamarxPlanilhaComando[@Banco,l'DELETE FROM tom_editor_recuperacoes WHERE id=?1 AND NOT EXISTS(SELECT 1 FROM textos WHERE id=?1 AND atual_id IS NOT NULL)',@Id]
+ChamarxPlanilhaComando[@Banco,l'DELETE FROM tom_editor_revisoes WHERE id=?1 AND NOT EXISTS(SELECT 1 FROM textos WHERE id=?1 AND atual_id IS NOT NULL)',@Id]
+ChamarxPlanilhaComando[@Banco,l'DELETE FROM tom_editor_documentos WHERE id=?1 AND NOT EXISTS(SELECT 1 FROM textos WHERE id=?1 AND atual_id IS NOT NULL)',@Id]
+ChamarxPlanilhaComando[@Banco,l'DELETE FROM textos WHERE id=?1 AND atual_id IS NULL',@Id]
+SQLiteTransacaoConfirmar[@Transacao]
+FimFuncao

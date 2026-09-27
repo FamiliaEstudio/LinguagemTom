@@ -18,6 +18,7 @@ Para trabalhar com outro acervo, inicie o programa com `TOM_DATA_DIRECTORY` apon
 - **Versões:** compara a atual e uma anterior, permite percorrer o histórico e consultar a ficha anterior. Restaurar prepara uma nova revisão; salvar a confirma sem remover nenhuma versão. Arquivar/reabrir é uma alteração da ficha, confirmada ao salvar.
 - **Pesquisa:** corpus na barra lateral; alternância entre personas e coleções cadastradas; filtros combináveis em Buscar. A lista tem páginas de 50 resultados e rolagem. A busca padrão tolera caixa e acentos e consulta apenas versões atuais. A opção exata respeita caixa/acentos e limites de palavra. `rocha` não encontra `rochas`. O histórico e os arquivados exigem opções explícitas.
 - **Importação:** escolha ou digite o caminho de DOCX, TXT UTF-8 ou Markdown. O original é copiado e conferido antes da prévia. Leia os avisos, selecione um trecho e use **Criar obra da seleção**; repita para dividir um arquivo. A prévia permanece aberta e mostra a confirmação; **Concluir** abre a última obra criada. Sem seleção, importa o documento inteiro. Na prévia, **Nova versão desta obra** substitui o conteúdo do texto atualmente aberto pelo trecho importado e preserva a versão anterior no histórico. Hashes iguais reutilizam o mesmo original; confirmar trechos continua sendo uma decisão manual.
+- **Excel / IA:** envie [o modelo XLSX](modelo-importacao.xlsx), seus Word/PDF e o [guia com prompt pronto](GUIA_IA_IMPORTACAO.md) à IA. Em **Importar**, abra o XLSX preenchido: cada linha da aba **Textos** cria uma nova obra. Revise texto, ficha e avisos; aceite sugestões de classificação quando desejar e clique em **Importar selecionadas**. Colunas `texto_2`, `texto_3`… continuam a mesma obra, sem inserir separadores. Espaços, versos e tabulações são preservados; estilos visuais usam o padrão do editor. Linhas inválidas ficam bloqueadas e as já importadas do mesmo arquivo ficam desmarcadas. Cancelar interrompe as próximas gravações, preservando as concluídas. Alterar a planilha produz outro hash; confira as marcas antes de reimportar.
 - **Exportação:** texto atual, coleção por título ou seleção marcada na ordem dos cliques. Escolha DOCX ou saída textual. Markdown preserva sua marcação como texto. A edição externa volta pelo fluxo de importação e revisão.
 - **Backup / Ajustes:** backup manual e pasta configurável. O automático verifica alterações diariamente enquanto o aplicativo está aberto, primeiro após um minuto e depois a cada cinco minutos. São preservados os sete dias mais recentes e quatro semanas com cópias disponíveis; manuais e pré-migração não entram na limpeza. A cópia é publicada após conferir banco e arquivos. Restaurar verifica os hashes e cria outra pasta antes de abri-la.
 
@@ -34,11 +35,15 @@ Comandos a partir da raiz do repositório, após `source scripts/env.sh` no Linu
 ```text
 node scripts/build-docx.js
 node aplicativos/scriptorium/scripts/generate-schema.js --check
+node aplicativos/scriptorium/scripts/generate-planilha.js --check
+node aplicativos/scriptorium/scripts/generate-import-template.js --check
 npm --prefix tom-lang run test:scriptorium-app
 npm --prefix tom-lang run verify:scriptorium-app
 npm --prefix tom-lang run package:scriptorium
 node aplicativos/scriptorium/scripts/verify-desktop.js
 ```
+
+`node aplicativos/scriptorium/scripts/verify-planilha.js` executa isoladamente o fluxo XLSX com interface simulada em O0/O2; ele também integra `verify:scriptorium-app`. O teste de desktop inclui XLSX em janela real. Os scripts `generate-planilha.js` e `generate-import-template.js`, sem `--check`, regeneram o módulo SQL de importação e o modelo distribuído.
 
 O build usa as versões e hashes de `scripts/toolchain.json`. `setup-native.js` inclui as dependências DOCX no preparo completo. `package.js` gera pacotes independentes em `.tools/<plataforma>/scriptorium/packages/O2/scriptorium/`; `--zip` acrescenta ZIP no Windows ou tar.gz no Linux, com arquivo SHA-256; o comando npm já inclui essa opção. O instalador Windows confere o manifesto SHA-256 antes de copiar os arquivos, publica cada versão em uma pasta própria e só então atualiza o atalho. O acervo não é copiado nem substituído. `--debug` gera O0. `--test-ui` cria um pacote de teste separado, com eventos simulados. Para atualizar o logo SVG, PNG e ICO, execute `node aplicativos/scriptorium/scripts/generate-logo.js` antes de empacotar.
 

@@ -27,6 +27,7 @@ function packageApplication({optimize='-O2',testUI=false,outDir}={}){
  }finally{if(scratch)fs.rmSync(scratch,{recursive:true,force:true});}
  const directory=path.dirname(binary);
  for(const name of ['README.md','CONTRATOS.md','ROADMAP.md','VALIDACAO.md']){const source=path.join(__dirname,'..',name);if(fs.existsSync(source))fs.copyFileSync(source,path.join(directory,name));}
+ for(const name of ['GUIA_IA_IMPORTACAO.md','modelo-importacao.xlsx'])fs.copyFileSync(path.join(__dirname,'..',name),path.join(directory,name));
  const files=[];function inventory(dir){for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const target=path.join(dir,entry.name);if(entry.isDirectory())inventory(target);else if(entry.name!=='scriptorium-package.json')files.push({path:path.relative(directory,target).replaceAll('\\','/'),sha256:createHash('sha256').update(fs.readFileSync(target)).digest('hex')});}}inventory(directory);
  const lock=require('../../../scripts/toolchain.json');fs.writeFileSync(path.join(directory,'scriptorium-package.json'),JSON.stringify({application:'Scriptorium',version:'0.1.0',schema:1,optimize,testUI,platform:process.platform,dependencies:{miniz:lock.miniz,libxml2:lock.libxml2},files},null,2)+'\n');
  return binary;

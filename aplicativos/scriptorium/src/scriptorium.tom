@@ -1,4 +1,5 @@
 Importar[l'./operacoes.tom']
+Importar[l'./planilha-interface.tom']
 
 DefRegistroxScriptoriumEstado
 PropInSd64xselecionado
@@ -984,7 +985,7 @@ FimSe
 CompararIgualxyInSd32x@Acaoy6
 Sex@ULTIMO
 EditorFoco[@Editor,Falso]
-ChamarxFormularioCaminho[@Formulario,l'DOCX, TXT ou Markdown a importar',l'']
+ChamarxFormularioCaminho[@Formulario,l'XLSX, DOCX, TXT ou Markdown a importar',l'']
 SetVarInSd64xUltimaObraImportaday0
 SetVarInSd32xModoy5
 FimSe
@@ -1052,14 +1053,29 @@ FimSe
 CompararIgualxyInSd32x@Modoy5
 Sex@ULTIMO
 FormularioValor[@Formulario,l'caminho',@ImportadoOrigem]
+ChamarxPlanilhaArquivo[@Banco,@ImportadoOrigem]
+DefVarBlxEhPlanilhay@ULTIMO
 DefRecursoxJsonPedidoyJsonCriar[1048576]
 JsonDefinirTexto[@JsonPedido,l'/operacao',l'importar']
+Sex@EhPlanilha
+JsonDefinirTexto[@JsonPedido,l'/operacao',l'ler_planilha']
+JsonDefinirTexto[@JsonPedido,l'/aba',l'Textos']
+FimSe
 JsonDefinirTexto[@JsonPedido,l'/origem',@ImportadoOrigem]
 ChamarxCaminho[@Raiz,l'fontes',@Auxiliar]
 JsonDefinirTexto[@JsonPedido,l'/fontes',@Auxiliar]
 JsonEscrever[@JsonPedido,@Pedido]
 ChamarxExecutarTrabalho[@Janela,@Fonte,@Pedido,@Saida,@Erro]
 Sex@ULTIMO
+Sex@EhPlanilha
+ChamarxPlanilhaPrevia[@Janela,@Fonte,@Banco,@CaminhoBanco,@Saida,@Erro]
+DefVarInSd64xImportadaPlanilhay@ULTIMO
+CompararMaiorxyInSd64x@ImportadaPlanilhay0
+Sex@ULTIMO
+Retornarx@ImportadaPlanilha
+FimSe
+SetVarInSd32xAcaoy14
+Senao
 DefRecursoxImportacaoyJsonLer[@Saida,536870912]
 JsonObterTexto[@Importacao,l'/hash',@ImportadoHash]
 JsonObterTexto[@Importacao,l'/avisos',@Auxiliar]
@@ -1079,6 +1095,7 @@ ChamarxAcervoRegistrarFonte[@Banco,@ImportadoHash,@ImportadoOrigem]
 FormularioFoco[@Formulario,Falso]
 SetVarInSd32xModoy4
 EditorFoco[@EditorPrevia,Verdadeiro]
+FimSe
 FimSe
 FimSe
 CompararIgualxyInSd32x@Modoy6

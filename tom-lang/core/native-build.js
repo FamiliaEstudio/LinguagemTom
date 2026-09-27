@@ -52,7 +52,7 @@ function linkArguments(requirements, clang = toolchain().clang, { testUI = false
   if (requirements.includes('form')) args.push(path.join(source,'form.c'));
   if (requirements.includes('files')) args.push(path.join(source,'files.c'));
   if (requirements.includes('docx')) args.push(path.join(source,'docx.c'),'-DMINIZ_STATIC_DEFINE','-DLIBXML_STATIC','-I',path.join(native,'include/miniz'),'-I',path.join(native,'include/libxml2'),path.join(native,'lib',msvc?'miniz.lib':'libminiz.a'),path.join(native,'lib',msvc?'libxml2s.lib':'libxml2.a'));
-  if (requirements.includes('file_jobs')) args.push(path.join(source,'file_jobs.c'));
+  if (requirements.includes('file_jobs')) args.push(path.join(source,'file_jobs.c'),path.join(source,'xlsx.c'));
   if (requirements.includes('file_dialog')) args.push(path.join(source,'file_dialog.c'));
   if (requirements.includes('channel')) args.push(path.join(source, 'channel.c'));
   if (requirements.includes('math')) args.push(path.join(source, 'math.c'));

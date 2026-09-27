@@ -1,0 +1,54 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const {DatabaseSync}=require('node:sqlite');
+const {platform}=require('../../../tom-lang/core/native-build');
+const {workbook}=require('./generate-import-template');
+const click=(x,y)=>`mouse ${x} ${y}\nrelease ${x} ${y}\n`,key=(k,m=0)=>`keydown ${k} ${m}\n`;
+const open=file=>click(590,36)+'wait 400\n'+`text ${file.replaceAll('\\','/')}\n`+click(620,850)+'wait 800\n';
+const confirm=click(100,850)+'wait 4000\n',close=click(300,850)+'wait 300\nquit\n';
+async function verifyPlanilha(binary,optimize){
+ const {run}=require('./verify-ui');
+ const root=path.join(platform,'scriptorium/validation');fs.mkdirSync(root,{recursive:true});
+ const dir=fs.mkdtempSync(path.join(root,'xlsx-ui-')),file=path.join(dir,'entrada.XLSX');
+ const first='  coração é 👩🏽‍💻\t\n\n  estrofe  \n';
+ const rows=[['texto','titulo','texto_2','corpus','genero','tags','corpus_sugerido','genero_sugerido','tags_sugeridas','composicao'],[first,'Poema explícito','fim','Bibliotheca','Prosa','luz','Opera','Poema','luz; manhã','25/03/2011'],['=literal','Sem inferência de autor','','','','','Opera','Poema','noite',''],['erro','Data impossível','','','','','','','','31/02/2026'],...Array.from({length:8},(_,i)=>['obra '+i,'Obra '+i])];
+ rows.at(-1)[0]='v'.repeat(32767);rows.at(-1)[2]='\n  continuação longa\n';
+ fs.writeFileSync(file,workbook({Textos:rows,Exemplos:[['não importar']]}));
+ const checked=await run(binary,dir,open(file)+click(190,750)+click(35,151)+click(70,750)+click(520,805)+click(740,805)+confirm+close);
+ let db=new DatabaseSync(path.join(dir,'acervo/dados.sqlite'));
+ assert.equal(db.prepare('SELECT count(*) AS n FROM acervo').get().n,9);
+ let data=db.prepare("SELECT * FROM acervo WHERE titulo='Poema explícito'").get();assert.equal(data.conteudo,first+'fim');assert.equal(data.corpus,'Bibliotheca');assert.equal(data.genero,'Prosa');assert.equal(data.composicao,'2011-03-25');assert.deepEqual(JSON.parse(data.ficha).tags,['luz','manhã']);assert.equal(JSON.parse(data.ficha).importacao_planilha.sugestoes_aplicadas,true);
+ data=db.prepare("SELECT * FROM acervo WHERE titulo='Sem inferência de autor'").get();assert.equal(data.autor,'');assert.equal(data.persona,'');assert.equal(data.corpus,'Opera');assert.equal(data.genero,'Poema');assert.equal(data.conteudo,'=literal');
+ assert.equal(db.prepare("SELECT conteudo FROM acervo WHERE titulo='Obra 7'").get().conteudo,rows.at(-1)[0]+rows.at(-1)[2]);
+ assert.equal(db.prepare('SELECT count(*) AS n FROM versao_fontes').get().n,0);assert.equal(db.prepare('SELECT count(*) AS n FROM fontes').get().n,1);assert.equal(db.prepare('SELECT count(*) AS n FROM pesquisa').get().n,9);db.close();
+ assert.match(fs.readFileSync(checked.trace,'utf8'),/Importação concluída/);
+ await run(binary,dir,open(file)+confirm+close);
+ const repeated=await run(binary,dir,open(file)+confirm+close);
+ assert.match(fs.readFileSync(repeated.trace,'utf8'),/Nenhuma obra selecionada/);
+ db=new DatabaseSync(path.join(dir,'acervo/dados.sqlite'));assert.equal(db.prepare('SELECT count(*) AS n FROM acervo').get().n,10);assert.equal(db.prepare('SELECT count(*) AS n FROM versoes').get().n,10);assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check,'ok');db.close();
+ await run(binary,dir,click(780,36)+'wait 2500\nquit\n');
+ const snapshot=path.join(dir,'backups',fs.readdirSync(path.join(dir,'backups')).find(x=>x.startsWith('snapshot-')&&!x.endsWith('.partial')));
+ const manifest=JSON.parse(fs.readFileSync(path.join(snapshot,'manifesto.json')));assert.equal(manifest.arquivos.length,1);assert.deepEqual(fs.readFileSync(path.join(snapshot,manifest.arquivos[0].caminho)),fs.readFileSync(file));
+ await run(binary,dir,click(978,36)+'wait 400\n'+key(97,64)+`text ${snapshot.replaceAll('\\','/')}\n`+click(620,850)+'wait 2500\nquit\n');
+ const restored=JSON.parse(fs.readFileSync(path.join(dir,'configuracao.json'))).acervo;
+ db=new DatabaseSync(path.join(restored,'dados.sqlite'));assert.equal(db.prepare('SELECT count(*) AS n FROM acervo').get().n,10);const provenance=JSON.parse(db.prepare("SELECT ficha FROM acervo WHERE titulo='Poema explícito'").get().ficha).importacao_planilha;assert.equal(provenance.linha,2);assert.equal(provenance.sugestoes_aplicadas,true);db.close();
+ // A save failure must preserve the completed prefix and remove only its own empty draft.
+ const failDir=fs.mkdtempSync(path.join(root,'xlsx-failure-')),failFile=path.join(failDir,'falha.xlsx');
+ fs.writeFileSync(failFile,workbook({Textos:[['texto'],['antes'],['FALHA'],['depois']]}));
+ await run(binary,failDir,'quit\n');db=new DatabaseSync(path.join(failDir,'acervo/dados.sqlite'));const emptyBefore=db.prepare('SELECT count(*) AS n FROM textos WHERE atual_id IS NULL').get().n;
+ db.exec("CREATE TRIGGER falha_planilha BEFORE UPDATE ON tom_editor_documentos WHEN new.texto='FALHA' BEGIN SELECT raise(ABORT,'Falha de teste'); END");db.close();
+ const failure=await run(binary,failDir,open(failFile)+confirm+close);assert.match(fs.readFileSync(failure.trace,'utf8'),/Importação interrompida na linha 3/);
+ db=new DatabaseSync(path.join(failDir,'acervo/dados.sqlite'));assert.equal(db.prepare('SELECT count(*) AS n FROM acervo').get().n,1);
+ // With no confirmed works, startup itself creates one new empty editor record.
+ assert.equal(db.prepare('SELECT count(*) AS n FROM textos WHERE atual_id IS NULL').get().n,emptyBefore+1);db.exec('DROP TRIGGER falha_planilha');db.close();
+ await run(binary,failDir,open(failFile)+confirm+close);db=new DatabaseSync(path.join(failDir,'acervo/dados.sqlite'));assert.equal(db.prepare('SELECT count(*) AS n FROM acervo').get().n,3);assert.equal(db.prepare('SELECT count(*) AS n FROM tom_editor_recuperacoes').get().n,0);db.close();
+ const cancelDir=fs.mkdtempSync(path.join(root,'xlsx-cancel-')),cancelFile=path.join(cancelDir,'cancelar.xlsx');
+ fs.writeFileSync(cancelFile,workbook({Textos:[['texto'],...Array.from({length:20},(_,i)=>['texto '+i])]}));
+ const cancelled=await run(binary,cancelDir,open(cancelFile)+click(100,850)+key(27)+'wait 1000\n'+close);assert.match(fs.readFileSync(cancelled.trace,'utf8'),/Importação cancelada/);
+ db=new DatabaseSync(path.join(cancelDir,'acervo/dados.sqlite'));const n=db.prepare('SELECT count(*) AS n FROM acervo').get().n;assert.ok(n>0&&n<20,String(n));db.close();
+ await run(binary,cancelDir,open(cancelFile)+confirm+close);db=new DatabaseSync(path.join(cancelDir,'acervo/dados.sqlite'));assert.equal(db.prepare('SELECT count(*) AS n FROM acervo').get().n,20);db.close();
+ console.log(`Scriptorium XLSX ${optimize}: prévia, seleção, sugestões, backup, restauração, falha, cancelamento e retomada OK.`);
+ return {dir,failDir,cancelDir,optimize,xlsx:true};
+}
+module.exports={verifyPlanilha};
+if(require.main===module)(async()=>{const {packageApplication}=require('./package');const results=[];for(const optimize of ['-O0','-O2'])results.push(await verifyPlanilha(packageApplication({optimize,testUI:true}),optimize));fs.writeFileSync(path.join(platform,'scriptorium/validation/xlsx-ui-results.json'),JSON.stringify(results,null,2)+'\n');})().catch(e=>{console.error(e.stack);process.exitCode=1;});

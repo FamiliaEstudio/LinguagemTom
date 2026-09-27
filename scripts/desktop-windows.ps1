@@ -1,4 +1,4 @@
-param([int]$ProcessId, [switch]$Multimedia, [string]$StateDemo, [switch]$Production, [string]$Trace, [string]$Ready)
+param([int]$ProcessId, [switch]$Multimedia, [string]$StateDemo, [switch]$Production, [string]$Trace, [string]$Ready, [string]$Xlsx, [string]$XlsxReady)
 $ErrorActionPreference = 'Stop'
 Add-Type @'
 using System;
@@ -96,6 +96,15 @@ try {
       $deadline = [DateTime]::UtcNow.AddSeconds(25)
       while (!(Test-Path -LiteralPath $Ready) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
       if (!(Test-Path -LiteralPath $Ready)) { throw 'Scriptorium did not save native input.' }
+      if ($Xlsx) {
+        State-Click 590 36; Start-Sleep -Milliseconds 400
+        Send-Text $Xlsx; State-Click 620 850; Start-Sleep -Milliseconds 800
+        State-Click 640 115; State-Click 530 805; State-Click 100 850
+        $deadline = [DateTime]::UtcNow.AddSeconds(25)
+        while (!(Test-Path -LiteralPath $XlsxReady) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 50 }
+        if (!(Test-Path -LiteralPath $XlsxReady)) { throw 'Scriptorium did not import XLSX through the native window.' }
+        Start-Sleep -Milliseconds 300; State-Click 300 850; Start-Sleep -Milliseconds 300
+      }
       State-Click 320 36; State-Click 730 850
       State-Click 250 36
       [void][TomDesktop]::SetWindowPos($window,[IntPtr]::Zero,0,0,1320,840,6)

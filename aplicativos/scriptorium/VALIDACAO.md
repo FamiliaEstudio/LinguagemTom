@@ -1,5 +1,17 @@
 # Validação do Scriptorium
 
+## Importação XLSX — 26/09/2026
+
+- **Aplicativo:** 21 testes aprovados em Linux/WSL e Windows, com leitor XLSX, DOCX e persistência nativos em O0/O2. Os oito testes acrescentados cobrem leitor, modelo, cabeçalhos, sugestões, datas, proveniência e retomada. O limite de células considera unidades UTF-16, inclusive emoji.
+- **Interface simulada:** `verify:scriptorium-app` aprovado em O0/O2 nas duas plataformas, incluindo revisão, paginação, seleção, aplicação de sugestões, novas obras, backup/restauração com XLSX, falha de gravação, cancelamento e retomada. Fórmulas e datas inválidas não entram no acervo; obras concluídas são preservadas.
+- **Desktop real:** `verify-desktop.js` aprovado com pacote de produção em X11/WSLg e Win32. Eventos nativos abrem a planilha, revisam a ficha, aplicam sugestões e confirmam duas obras. O banco confere Unicode, tabulação, estrofe e continuação exatos. Não depende de eventos simulados do runtime.
+- **Regressões compartilhadas:** 20 testes de `test:scriptorium` e nove de `test:document-editor` aprovados no Linux. Não houve mudança de sintaxe, ABI pública ou esquema persistente do acervo.
+- **Build:** bibliotecas CMake atualizadas e instaladas localmente em Linux e Windows. Pacotes incluem o modelo XLSX e o guia da IA em seu manifesto de hashes. Geradores do esquema, das consultas XLSX e do modelo foram conferidos com `--check`.
+
+Relatórios das interfaces ficam em `.tools/<plataforma>/scriptorium/validation/ui-results.json` e `desktop-O2.json`. A execução isolada de `verify-planilha.js` também produz `xlsx-ui-results.json`. As planilhas de teste são sintéticas; a fidelidade de transcrição por uma IA/OCR e a abertura do modelo no Excel instalado pelo usuário ainda precisam de conferência com seus documentos reais.
+
+## Validação anterior do MVP
+
 Verificação local em 18/09/2026, com Node 24.21.0 e LLVM 21.1.8. Windows x64 executado nativamente via PowerShell; Linux x64 executado em WSL, com arquivos em `/mnt/c`. Os resultados abaixo são medições deste ambiente, não garantias de tempo em outros computadores.
 
 ## Resultados reproduzidos

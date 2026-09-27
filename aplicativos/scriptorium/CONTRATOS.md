@@ -27,6 +27,7 @@ Um original pode originar vários textos; cada versão pode referenciar vários 
 | Operação | Campos |
 |---|---|
 | `importar` | `origem`, `fontes` opcional; retorna hash, origem, avisos e documento |
+| `ler_planilha` | `origem` XLSX, `aba`, `fontes` opcional; retorna hash, origem, aba e linhas com células tipadas e coordenadas |
 | `exportar` | `destino`, `formato`, `documentos` em ordem; ou `banco`, `consulta` somente leitura e `parametro`, produzindo uma coluna de TomDocumento por linha |
 | `backup` | `banco`, `raiz`, `destino`, `classe`, `consulta` somente leitura com caminho relativo e hash esperado opcional |
 | `restaurar` | `origem` da cópia concluída e `destino` como pasta que receberá o acervo recuperado |
@@ -40,3 +41,13 @@ A lista de fontes e a imagem do banco pertencem à mesma transação de leitura.
 A restauração valida manifesto, caminhos relativos, hashes e `PRAGMA integrity_check`; copia em staging, confere novamente e publica uma pasta separada. Não há exclusão do acervo anterior. Arquivos transitórios `.partial` não representam backups concluídos. No WSL/DrvFS, a publicação usa rename compatível com o filesystem quando RENAME_NOREPLACE não está disponível; diretórios de cópias concluídas não são substituídos.
 
 A aplicação não implementa sincronização do banco aberto. Uma ferramenta externa pode sincronizar a pasta de backups concluídos. A primeira versão não mescla acervos nem executa análise literária automática.
+
+## Importação de planilhas
+
+`planilha.sql` e `planilha-sugestoes.sql` são fontes das regras de entrada; `scripts/generate-planilha.js` gera `planilha-sql.tom`. O staging usa tabelas TEMP na conexão do aplicativo e não altera o esquema persistente. Apenas a aba `Textos` é importada; a linha 1 contém cabeçalhos únicos. `texto` é obrigatório e continua em `texto_2`, `texto_3`… pela ordem numérica, sem separadores acrescentados. Células são textuais; fórmulas, datas/números automáticos e erros do Excel impedem a importação da linha. Campos de texto nunca são aparados. A normalização CRLF/CR → LF pertence ao documento, como nos demais fluxos.
+
+Metadados explícitos prevalecem sobre sugestões. Aplicar sugestões preenche corpus/gênero ausentes e acrescenta tags distintas. O contexto armazena a aceitação em `ficha.importacao_planilha.sugestoes_aplicadas`; a ficha também preserva hash, aba, linha, `arquivo_origem`, `localizacao_origem` e as quatro colunas de sugestão. Não há inferência automática de autoria, persona ou datas. Padrões de entrada: título “Sem título”, corpus Fragmenta, estado Rascunho e certeza Indeterminado; demais campos desconhecidos vazios.
+
+Cada confirmação passa pelo adaptador existente e seus triggers, produzindo uma nova obra e sua versão inicial. O lote não é uma transação única: erro ou cancelamento interrompe as próximas linhas; gravações concluídas permanecem. Uma falha remove somente o rascunho vazio criado para a linha que falhou, depois de liberar seu adaptador. Linhas já confirmadas são reconhecidas consultando o histórico imutável por hash/aba/linha e ficam desmarcadas; uma marcação explícita permite nova cópia. Arquivos alterados são novas entradas.
+
+O original XLSX é copiado e conferido antes da prévia, registrado em `fontes` antes da primeira confirmação e incluído nos backups existentes. Sua ligação às versões está em `ficha.importacao_planilha`; não são fabricados intervalos em `versao_fontes`. Nomes de Word/PDF escritos na planilha são referências documentais, não pedidos de leitura ou cópia desses arquivos. Edição de ficha e restauração de versões preservam o objeto adicional de proveniência.

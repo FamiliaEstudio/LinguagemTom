@@ -1,5 +1,6 @@
 #include "docx.h"
 #include "file_io.h"
+#include "xlsx.h"
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL.h>
 #include <sqlite3.h>
@@ -17,6 +18,34 @@ static int32_t make_parent(const char *path){char *p=SDL_strdup(path);if(!p)retu
 static int32_t integrity(const char *path){sqlite3 *db=NULL;sqlite3_stmt *q=NULL;int code=sqlite3_open_v2(path,&db,SQLITE_OPEN_READONLY,NULL);if(code==SQLITE_OK)code=sqlite3_prepare_v2(db,"PRAGMA integrity_check",-1,&q,NULL);if(code==SQLITE_OK){code=sqlite3_step(q);if(code==SQLITE_ROW&&strcmp((const char*)sqlite3_column_text(q,0),"ok")==0&&sqlite3_step(q)==SQLITE_DONE)code=SQLITE_OK;else code=SQLITE_CORRUPT;}sqlite3_finalize(q);sqlite3_close(db);return code==SQLITE_OK?TOM_OK:TOM_SQLITE;}
 static SDL_EnumerationResult remove_entry(void *unused,const char *dir,const char *name){(void)unused;char *p=tom_file_join(dir,name);if(!p)return SDL_ENUM_FAILURE;SDL_PathInfo info;if(SDL_GetPathInfo(p,&info)&&info.type==SDL_PATHTYPE_DIRECTORY)SDL_EnumerateDirectory(p,remove_entry,NULL);int ok=SDL_RemovePath(p);free(p);return ok?SDL_ENUM_CONTINUE:SDL_ENUM_FAILURE;}
 static void remove_tree(const char *path){SDL_EnumerateDirectory(path,remove_entry,NULL);SDL_RemovePath(path);}
+static int32_t spreadsheet_progress(void *context,int percent){
+ TomFileJob *j=context;int current=atomic_load(&j->progress);if(percent>current)atomic_store(&j->progress,percent);return cancelled(j);
+}
+static int32_t read_spreadsheet(TomFileJob *j,yyjson_val *request){
+ const char *source=str(request,"origem"),*sheet=str(request,"aba"),*cache=str(request,"fontes");
+ const char *extension=strrchr(source,'.');
+ if(!*source||!*sheet||!extension||SDL_strcasecmp(extension,".xlsx")){
+  snprintf(j->message,sizeof(j->message),"Escolha um arquivo .xlsx e informe a aba.");return TOM_INVALID;
+ }
+ int32_t e=cancelled(j);char hash[65],verify[65];char *cached=NULL;
+ if(!e)e=hash_string(source,hash);
+ if(!e&&*cache){
+  e=tom_file_mkdir(cache);if(!e){cached=tom_file_join(cache,hash);if(!cached)e=TOM_MEMORY;}
+  int32_t exists=0;if(!e)e=tom_file_exists(cached,&exists);if(!e&&!exists)e=tom_file_copy(source,cached);
+  if(!e)e=hash_string(cached,verify);if(!e&&strcmp(hash,verify))e=TOM_CONFLICT;
+ }
+ yyjson_mut_doc *result=yyjson_mut_doc_new(NULL);if(!result&&!e)e=TOM_MEMORY;
+ if(!e)e=tom_xlsx_read(cached?cached:source,sheet,result,spreadsheet_progress,j,j->message,sizeof(j->message));
+ /* A caller without a source cache still receives a hash of the bytes read. */
+ if(!e)e=hash_string(cached?cached:source,verify);if(!e&&strcmp(hash,verify))e=TOM_CONFLICT;
+ if(!e)e=cancelled(j);
+ if(!e){yyjson_mut_val *root=yyjson_mut_doc_get_root(result);
+  if(!yyjson_mut_obj_add_strcpy(result,root,"hash",hash)||!yyjson_mut_obj_add_strcpy(result,root,"origem",source))e=TOM_MEMORY;
+  else e=set_result(j,result);
+ }
+ if(!e&&strlen(j->result)>=268435456){free(j->result);j->result=NULL;e=TOM_CAPACITY;}
+ yyjson_mut_doc_free(result);free(cached);return e;
+}
 static int32_t import_document(TomFileJob *j,yyjson_val *request){
  const char *source=str(request,"origem"),*cache=str(request,"fontes");if(!*source)return TOM_INVALID;char hash[65];int32_t e=hash_string(source,hash);if(e)return e;atomic_store(&j->progress,10);
  char *cached=NULL;if(*cache){e=tom_file_mkdir(cache);cached=tom_file_join(cache,hash);if(!cached)e=TOM_MEMORY;int32_t exists=0;if(!e)e=tom_file_exists(cached,&exists);if(!e&&!exists)e=tom_file_copy(source,cached);char verify[65];if(!e)e=hash_string(cached,verify);if(!e&&strcmp(hash,verify))e=TOM_CONFLICT;}
@@ -109,7 +138,7 @@ static int32_t restore(TomFileJob *j,yyjson_val *request){
  free(target);free(final);free(staging);free(manifest_path);free(db);free(bytes);yyjson_doc_free(doc);return e;
 }
 static int worker(void *argument){TomFileJob *j=argument;yyjson_doc *doc=yyjson_read(j->request,strlen(j->request),0);yyjson_val *root=doc?yyjson_doc_get_root(doc):NULL;const char *operation=root?str(root,"operacao"):"";int32_t e=TOM_INVALID;
- if(!strcmp(operation,"importar"))e=import_document(j,root);else if(!strcmp(operation,"exportar"))e=export_document(j,root);else if(!strcmp(operation,"backup"))e=snapshot(j,root);else if(!strcmp(operation,"restaurar"))e=restore(j,root);
+ if(!strcmp(operation,"importar"))e=import_document(j,root);else if(!strcmp(operation,"ler_planilha"))e=read_spreadsheet(j,root);else if(!strcmp(operation,"exportar"))e=export_document(j,root);else if(!strcmp(operation,"backup"))e=snapshot(j,root);else if(!strcmp(operation,"restaurar"))e=restore(j,root);
  yyjson_doc_free(doc);if(e&&!j->message[0])snprintf(j->message,sizeof(j->message),"%s (código %d). %s",e==TOM_LATE?"Operação cancelada":"Não foi possível concluir a operação",e,SDL_GetError());atomic_store(&j->error,e);atomic_store(&j->progress,e?atomic_load(&j->progress):100);atomic_store(&j->state,e==TOM_LATE?3:e?2:1);return 0;
 }
 void tom_file_job_free(TomFileJob *j){if(!j)return;atomic_store(&j->cancel,1);if(j->thread)SDL_WaitThread(j->thread,NULL);free(j->request);free(j->result);free(j);tom_object_released();}

@@ -134,4 +134,4 @@ Injeção de eventos, relógios, diretório de dados e traces é compilada somen
 
 ## Arquivos, DOCX e formulários
 
-`files.c`, `docx.c`, `file_jobs.c`, `file_dialog.c` e `form.c` implementam operações reutilizáveis de arquivo, conversão DOCX, trabalhos assíncronos, seleção de caminhos e formulários. `editor_sqlite.c` captura contexto JSON junto ao documento. Contratos e limites estão em [arquivos-docx.md](../../docs/arquivos-docx.md); testes adicionais ficam em `aplicativos/scriptorium/tests/` na raiz. Os builds diretos e CMake incluem miniz/libxml2 estáticos, com versões fixadas na toolchain.
+`files.c`, `docx.c`, `xlsx.c`, `file_jobs.c`, `file_dialog.c` e `form.c` implementam operações reutilizáveis de arquivo, conversão DOCX, leitura XLSX, trabalhos assíncronos, seleção de caminhos e formulários. `editor_sqlite.c` captura contexto JSON junto ao documento. Contratos e limites estão em [arquivos-docx.md](../../docs/arquivos-docx.md); testes adicionais ficam em `aplicativos/scriptorium/tests/` na raiz. Os builds diretos e CMake incluem miniz/libxml2 estáticos, com versões fixadas na toolchain.
